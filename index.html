@@ -1,0 +1,2261 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+
+// ══════════════════════════════════════════════
+// DATA
+// ══════════════════════════════════════════════
+const ADMIN_CREDS = { user: "pavel", pass: "rts2049" };
+
+const FACTIONS = [
+  { id:"serbia",    name:"Kingdom of Serbia",        short:"SERBIA",   color:"#ADD767", ik:"monarchy",  morale:120, alliance:"axis",  region:"Balkans" },
+  { id:"yugoslavia",name:"Greater Yugoslav Empire",  short:"YUGO",     color:"#7F0020", ik:"capitalism",morale:65,  alliance:"axis",  region:"Balkans" },
+  { id:"ukraine",   name:"Kingdom of Ukraine",       short:"UKRAINE",  color:"#04598C", ik:"communism", morale:110, alliance:"axis",  region:"E.Europe" },
+  { id:"japan",     name:"Japan (Allied Occ. Zone)", short:"JAPAN",    color:"#D98759", ik:"capitalism",morale:105, alliance:"axis",  region:"E.Asia" },
+  { id:"ussr",      name:"Reformed USSR (Zhukov)",   short:"USSR",     color:"#A41718", ik:"communism", morale:80,  alliance:"east",  region:"E.Europe/Asia" },
+  { id:"china",     name:"China",                    short:"CHINA",    color:"#CC4141", ik:"communism", morale:100, alliance:"east",  region:"Asia" },
+  { id:"nkorea",    name:"North Korea (DPRK)",        short:"DPRK",     color:"#EC4928", ik:"communism", morale:95,  alliance:"east",  region:"Korea" },
+  { id:"morocco",   name:"Socialist Rep. Morocco",   short:"MOROCCO",  color:"#94B4CE", ik:"communism", morale:100, alliance:"east",  region:"N.Africa" },
+  { id:"usa",       name:"United States of America", short:"USA",      color:"#0B3D7D", ik:"capitalism",morale:130, alliance:null,    region:"N.America" },
+  { id:"egypt",     name:"Egypt (Islamist)",          short:"EGYPT",    color:"#A7DC1B", ik:"communism", morale:115, alliance:null,    region:"N.Africa" },
+  { id:"burgundy",  name:"Burgundy",                 short:"BURGUNDY", color:"#222221", ik:"fascism",   morale:100, alliance:null,    region:"W.Europe" },
+  { id:"rome",      name:"Roman Empire",             short:"ROME",     color:"#8667AA", ik:"fascism",   morale:100, alliance:null,    region:"Italy" },
+  { id:"poland",    name:"Third Republic of Poland", short:"POLAND",   color:"#B68C0F", ik:"fascism",   morale:100, alliance:null,    region:"C.Europe" },
+  { id:"israel",    name:"Israel",                   short:"ISRAEL",   color:"#073F65", ik:"capitalism",morale:100, alliance:null,    region:"Levant" },
+  { id:"ussn",      name:"USSN",                     short:"USSN",     color:"#5DA99E", ik:"communism", morale:100, alliance:null,    region:"Unknown" },
+  { id:"baltic",    name:"Baltic Protection Force",  short:"BALTIC",   color:"#023857", ik:"capitalism",morale:100, alliance:null,    region:"Baltic" },
+  { id:"norway",    name:"Norway",                   short:"NORWAY",   color:"#A53F40", ik:"capitalism",morale:100, alliance:null,    region:"Scandinavia" },
+  { id:"phuceld",   name:"Former Rep. of PhúcEld",   short:"PHÚCELD",  color:"#6DAB89", ik:"capitalism",morale:100, alliance:null,    region:"Unknown" },
+];
+
+const IK_LBL = { communism:"Communist", capitalism:"Capitalist", fascism:"Fascist", monarchy:"Monarchy" };
+const IK_COLOR = { communism:"#ef5350", capitalism:"#42a5f5", fascism:"#bdbdbd", monarchy:"#ffb300" };
+
+const UNITS = [
+  { id:"ac",  name:"Armored Car",      abbr:"AC",   cls:"light",  bp:1,   g:0, maint:1,  spd:80,  sym:"AC" },
+  { id:"lt",  name:"Light Tank",       abbr:"LT",   cls:"light",  bp:1,   g:0, maint:5,  spd:50,  sym:"LT" },
+  { id:"amp", name:"Amphibious Tank",  abbr:"AMP",  cls:"light",  bp:1,   g:0, maint:5,  spd:45,  sym:"↟" },
+  { id:"hel", name:"Helicopter",       abbr:"HEL",  cls:"light",  bp:1,   g:1, maint:5,  spd:200, sym:"✈" },
+  { id:"ifv", name:"IFV",              abbr:"IFV",  cls:"util",   bp:1,   g:0, maint:5,  spd:60,  sym:"IFV" },
+  { id:"apc", name:"APC",              abbr:"APC",  cls:"util",   bp:1,   g:0, maint:5,  spd:55,  sym:"APC" },
+  { id:"rv",  name:"Recovery Vehicle", abbr:"RV",   cls:"util",   bp:1,   g:0, maint:0,  spd:30,  sym:"RV" },
+  { id:"mt",  name:"Medium Tank",      abbr:"MT",   cls:"medium", bp:1.5, g:0, maint:10, spd:38,  sym:"MT" },
+  { id:"mbt", name:"MBT",              abbr:"MBT",  cls:"medium", bp:2,   g:0, maint:15, spd:35,  sym:"MBT" },
+  { id:"mtd", name:"Medium TD",        abbr:"MTD",  cls:"medium", bp:1.5, g:0, maint:10, spd:35,  sym:"MTD" },
+  { id:"spgl",name:"SPG (Light)",      abbr:"SPG",  cls:"spg",    bp:1,   g:0, maint:10, spd:25,  sym:"⊕", howitzer:"light" },
+  { id:"spgm",name:"SPG (Medium)",     abbr:"SPG",  cls:"spg",    bp:1.5, g:0, maint:10, spd:20,  sym:"⊕", howitzer:"medium" },
+  { id:"hspg",name:"Heavy SPG",        abbr:"HSPG", cls:"spg",    bp:2,   g:1, maint:20, spd:15,  sym:"⊛", howitzer:"heavy" },
+  { id:"ht",  name:"Heavy Tank",       abbr:"HT",   cls:"heavy",  bp:3,   g:1, maint:20, spd:28,  sym:"HT" },
+  { id:"aht", name:"Adv. Heavy Tank",  abbr:"AHT",  cls:"heavy",  bp:3,   g:2, maint:20, spd:25,  sym:"AHT" },
+  { id:"htd", name:"Heavy TD",         abbr:"HTD",  cls:"heavy",  bp:3,   g:1, maint:20, spd:22,  sym:"HTD" },
+  { id:"sht", name:"Super Heavy Tank", abbr:"SHT",  cls:"super",  bp:5,   g:3, maint:30, spd:15,  sym:"SHT" },
+  { id:"sha", name:"Super Heavy Arty", abbr:"SHA",  cls:"super",  bp:5,   g:3, maint:30, spd:5,   sym:"SHA", isArty:true, range:3, reload:4 },
+  { id:"ls",  name:"Landship",         abbr:"LS",   cls:"super",  bp:8,   g:5, maint:50, spd:5,   sym:"LS" },
+];
+
+const TILE_TYPES = {
+  blank:    { label:"Blank",       icon:"□", bp:0,   g:0,  f:0,  rp:0, moraleLoss:1   },
+  factory:  { label:"Factory",     icon:"⚙", bp:1,   g:0,  f:0,  rp:0, moraleLoss:2   },
+  iron:     { label:"Iron Mine",   icon:"⛏", bp:0.5, g:0,  f:0,  rp:0, moraleLoss:1.5 },
+  gold:     { label:"Gold Mine",   icon:"◈", bp:0,   g:1,  f:0,  rp:0, moraleLoss:2   },
+  oil:      { label:"Oil Field",   icon:"◉", bp:0,   g:0,  f:1,  rp:0, moraleLoss:1.5 },
+  research: { label:"Research",    icon:"⊕", bp:0,   g:0,  f:0,  rp:1, moraleLoss:2   },
+  harbour:  { label:"Harbour",     icon:"⚓", bp:0.5, g:0,  f:0,  rp:0, moraleLoss:1.5 },
+  capital:  { label:"Capital",     icon:"★", bp:0,   g:0,  f:0,  rp:0, moraleLoss:50  },
+  city1:    { label:"City I",      icon:"⌂", bp:0,   g:0,  f:0,  rp:0, moraleLoss:10  },
+  city2:    { label:"City II",     icon:"⌂", bp:0,   g:0,  f:0,  rp:0, moraleLoss:15  },
+  fort1:    { label:"Fort I",      icon:"▲", bp:0,   g:0,  f:0,  rp:0, moraleLoss:0   },
+  warehouse:{ label:"Warehouse",   icon:"⬛", bp:0,   g:0,  f:0,  rp:0, moraleLoss:0   },
+};
+
+const TILE_COLORS = {
+  blank:"#2a3020",factory:"#5a1a7a",iron:"#253040",gold:"#8a6010",
+  oil:"#252a30",research:"#0a4030",harbour:"#0a2050",capital:"#8a4000",
+  city1:"#1a4a20",city2:"#207030",fort1:"#303840",warehouse:"#301a10",
+};
+
+const MORALE_TABLE = [
+  {t:0,  neg:true, txt:"CIVIL WAR automatic · -2000 currency"},
+  {t:10, neg:true, txt:"10% units desert · -3 res/turn"},
+  {t:20, neg:true, txt:"Losing capital = defeat"},
+  {t:30, neg:true, txt:"Enemy captures 5 extra vehicles"},
+  {t:40, neg:true, txt:"+1 rebellion tile · -2 res/turn"},
+  {t:50, neg:true, txt:"2 rebellions · Capital bonuses off"},
+  {t:60, neg:true, txt:"+1 rebellion tile · -1 res/turn"},
+  {t:70, neg:true, txt:"BLITZKRIEG DISABLED · -2 res/turn"},
+  {t:80, neg:true, txt:"No default RP · No city currency"},
+  {t:140,neg:false,txt:"-1 rebel tile · +2 res · +1000 currency"},
+  {t:150,neg:false,txt:"+1 auto-production vehicle"},
+  {t:160,neg:false,txt:"Double team bonus · +1 res/turn"},
+  {t:170,neg:false,txt:"Double capital & harbour bonuses"},
+  {t:180,neg:false,txt:"+2 res/turn"},
+  {t:200,neg:false,txt:"Build 2nd capital · +1 auto-vehicle"},
+];
+
+// SPG damage table: howitzer type vs target class
+function calcSPGDamage(spgCount, howType, targetCls) {
+  const order = ["light","medium","heavy","super"];
+  const howOrder = ["light","medium","heavy","antifort"];
+  const hi = howOrder.indexOf(howType);
+  const ti = order.indexOf(targetCls);
+  if(hi < 0 || ti < 0) return {pct:0, kills:0};
+  const diff = hi - ti;
+  let mult = diff > 0 ? Math.pow(2, diff) : diff < 0 ? 1/Math.pow(2, -diff) : 1;
+  const pct = Math.max(0, Math.round(spgCount * mult));
+  const kills = Math.max(0, Math.floor(pct / 6.25));
+  return {pct, kills, eff: mult >= 2 ? "SUPERIOR" : mult === 1 ? "OPTIMAL" : mult >= 0.5 ? "REDUCED" : "MINIMAL"};
+}
+
+// RTS Time
+const RTS_START = new Date("2025-05-24T00:00:00Z");
+const MS_PER_GAME_MONTH = (7*24*3600000)/6;
+const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function getRTSDate() {
+  const elapsed = Date.now() - RTS_START.getTime();
+  const gm = Math.floor(elapsed / MS_PER_GAME_MONTH);
+  let month = 6 + gm; let year = 1949;
+  while(month >= 12){month -= 12; year++;}
+  return `${MONTHS_SHORT[month]} ${year}`;
+}
+
+// Color helpers
+function moraleColor(m) {
+  if(m >= 140) return "#7bc47e";
+  if(m >= 80)  return "#c8d4c4";
+  if(m >= 50)  return "#ffb300";
+  return "#ef5350";
+}
+
+// ══════════════════════════════════════════════
+// STORAGE
+// ══════════════════════════════════════════════
+async function sGet(k) {
+  try { const r = await window.storage.get(k, true); return r ? JSON.parse(r.value) : null; }
+  catch { return null; }
+}
+async function sSet(k, v) {
+  try { await window.storage.set(k, JSON.stringify(v), true); } catch(e) { console.error(e); }
+}
+async function sDel(k) {
+  try { await window.storage.delete(k, true); } catch {}
+}
+
+function mkDefaultPlayer(username, nation) {
+  return {
+    username: username.toLowerCase(),
+    displayName: username,
+    password: btoa(username + "rts2049"),
+    nation: nation || null,
+    ideology: nation ? (FACTIONS.find(f=>f.id===nation)?.ik || null) : null,
+    morale: 100,
+    resources: { bp:10, rp:5, g:3, f:2 },
+    tanks: {},
+    divisions: [],
+    tiles: [],
+    battlesWon: 0, battlesLost: 0, tilesOwned: 0,
+    online: false, lastSeen: Date.now(),
+    unlockedTechs: [],
+    puppet: null, // id of puppeted nation
+  };
+}
+
+// ══════════════════════════════════════════════
+// MAIN APP
+// ══════════════════════════════════════════════
+export default function App() {
+  const [screen, setScreen] = useState("login"); // login | app
+  const [currentUser, setCurrentUser] = useState(null);
+  const [activePage, setActivePage] = useState("map");
+  const [notifs, setNotifs] = useState([]);
+  const [rtsDate, setRtsDate] = useState(getRTSDate());
+  const [clock, setClock] = useState("");
+  const [gameState, setGameState] = useState({ session:7, year:1949, announcements:[] });
+  const [mapTiles, setMapTiles] = useState([]);
+  const [mapUnits, setMapUnits] = useState([]);
+  const [battles, setBattles] = useState([]);
+  const [trades, setTrades] = useState([]);
+  const [sessionLog, setSessionLog] = useState([
+    {s:3,type:"war",fac:"Serbia vs Yugoslavia",desc:"Serbia declares war. Capital fell same day.",done:true},
+    {s:4,type:"diplo",fac:"THE AXIS formed",desc:"Ukraine, Japan, Netherlands, Yugoslavia, Serbia — anti-communist bloc.",done:true},
+    {s:5,type:"lore",fac:"USSR Reformed",desc:"Zhukov seizes power after Stalin vanishes. Rebuilds Red Army.",done:true},
+    {s:7,type:"war",fac:"Rome vs Israel",desc:"Rome demands full Israeli coastline. War declared.",done:false,cur:true},
+  ]);
+  const [politics, setPolitics] = useState([
+    {id:1,author:"EGYPT",nation:"egypt",type:"war",body:"In the name of Allah! We declare holy war on Serbia for their crimes against the faith! Allahu Akbar! ❤️",ts:Date.now()-86400000},
+    {id:2,author:"SERBIA",nation:"serbia",type:"official",body:"Serbia has defeated Yugoslavia. We offer vassalization terms. Serbia stands with the ACL — Anti-Communist League.",ts:Date.now()-43200000},
+    {id:3,author:"PAVEL",nation:null,type:"ann",body:"📢 SESSION 7 STARTS SATURDAY 18:00. Submit all tank files 1 hour before. Good luck commanders.",ts:Date.now()-3600000},
+  ]);
+  const [allUsers, setAllUsers] = useState([]);
+  const [adminPass, setAdminPass] = useState(ADMIN_CREDS.pass);
+
+  const showNotif = useCallback((msg, type="ok") => {
+    const id = Date.now();
+    setNotifs(n => [...n, {id, msg, type}]);
+    setTimeout(() => setNotifs(n => n.filter(x => x.id !== id)), 3500);
+  }, []);
+
+  // Load data
+  useEffect(() => {
+    const load = async () => {
+      const gs = await sGet("game:state");
+      if(gs) setGameState(gs);
+      const tiles = await sGet("map:tiles");
+      if(tiles) setMapTiles(tiles);
+      const units = await sGet("map:units");
+      if(units) setMapUnits(units);
+      const btls = await sGet("map:battles");
+      if(btls) setBattles(btls);
+      const trd = await sGet("trades");
+      if(trd) setTrades(trd);
+      const log = await sGet("session:log");
+      if(log) setSessionLog(log);
+      const pol = await sGet("politics");
+      if(pol) setPolitics(pol);
+    };
+    load();
+    const iv = setInterval(() => {
+      setRtsDate(getRTSDate());
+      const n = new Date();
+      setClock(`${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}:${String(n.getSeconds()).padStart(2,"0")}`);
+    }, 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const login = async (user, pass) => {
+    const u = user.trim().toLowerCase();
+    if(u === ADMIN_CREDS.user && pass === adminPass) {
+      const admin = { username:"pavel", displayName:"Pavel", isAdmin:true, nation:null, resources:{bp:999,rp:999,g:999,f:999}, tanks:{}, morale:100 };
+      setCurrentUser(admin);
+      // Load all users for admin
+      const keys = await window.storage.list("user:", true).catch(() => ({keys:[]}));
+      const users = [];
+      for(const k of (keys.keys||[])) {
+        const ud = await sGet(k.replace(/^.*?user:/,"user:").split(":").slice(0,2).join(":"));
+        if(ud) users.push(ud);
+      }
+      setAllUsers(users);
+      setScreen("app"); setActivePage("map");
+      return true;
+    }
+    const stored = await sGet("user:" + u);
+    if(!stored) return false;
+    if(stored.password !== btoa(pass)) return false;
+    setCurrentUser(stored);
+    setScreen("app"); setActivePage("map");
+    return true;
+  };
+
+  const register = async (user, pass, nation) => {
+    const u = user.trim().toLowerCase();
+    if(u === "pavel") return false;
+    const existing = await sGet("user:" + u);
+    if(existing) return "taken";
+    const nd = mkDefaultPlayer(u, nation);
+    nd.password = btoa(pass);
+    await sSet("user:" + u, nd);
+    setCurrentUser(nd);
+    setScreen("app"); setActivePage("map");
+    return true;
+  };
+
+  const saveUser = async (ud) => {
+    await sSet("user:" + ud.username, ud);
+    if(currentUser && currentUser.username === ud.username) setCurrentUser({...ud});
+    setAllUsers(prev => prev.map(u => u.username === ud.username ? ud : u));
+  };
+
+  const saveTiles = async (t) => { setMapTiles(t); await sSet("map:tiles", t); };
+  const saveUnits = async (u) => { setMapUnits(u); await sSet("map:units", u); };
+  const saveBattles = async (b) => { setBattles(b); await sSet("map:battles", b); };
+  const saveTrades = async (t) => { setTrades(t); await sSet("trades", t); };
+  const saveLog = async (l) => { setSessionLog(l); await sSet("session:log", l); };
+  const savePolitics = async (p) => { setPolitics(p); await sSet("politics", p); };
+  const saveGameState = async (gs) => { setGameState(gs); await sSet("game:state", gs); };
+
+  const isAdmin = currentUser?.isAdmin;
+  const myFaction = currentUser && !isAdmin ? FACTIONS.find(f=>f.id===currentUser.nation) : null;
+
+  if(screen === "login") return <LoginScreen login={login} register={register} />;
+
+  const PAGES = [
+    {id:"map",       label:"I. MAP"},
+    {id:"ops",       label:"II. OPERATIONS"},
+    {id:"vehicles",  label:"III. VEHICLES"},
+    {id:"techtree",  label:"IV. TECH TREES"},
+    {id:"divisions", label:"V. DIVISIONS"},
+    {id:"market",    label:"VI. MARKET"},
+    {id:"politics",  label:"VII. POLITICS"},
+    {id:"nations",   label:"VIII. NATIONS"},
+    {id:"profile",   label:"IX. MY PROFILE"},
+    {id:"timeline",  label:"X. SESSION LOG"},
+    {id:"calc",      label:"XI. CALCULATORS"},
+    {id:"ai",        label:"XII. ADVISOR"},
+    ...(isAdmin ? [{id:"admin",label:"⚙ ADMIN",admin:true}] : []),
+  ];
+
+  const ctx = { currentUser, isAdmin, myFaction, mapTiles, mapUnits, battles, trades, sessionLog, politics, allUsers, gameState, showNotif, saveTiles, saveUnits, saveBattles, saveTrades, saveLog, savePolitics, saveGameState, saveUser, setAllUsers, adminPass, setAdminPass };
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#0a0b09",color:"#c8d4c4",fontFamily:"'Segoe UI',system-ui,sans-serif",fontSize:13,overflow:"hidden"}}>
+      {/* HEADER */}
+      <div style={{height:48,display:"flex",alignItems:"center",background:"#0f110e",borderBottom:"1px solid #1e2419",padding:"0 14px",gap:14,flexShrink:0,boxShadow:"0 2px 12px rgba(0,0,0,.6)"}}>
+        <div style={{fontSize:14,fontWeight:700,letterSpacing:3,color:"#7bc47e"}}>RTS <span style={{color:"#4a6046"}}>COMMAND CENTER</span></div>
+        <div style={{width:1,height:28,background:"#1e2419"}}/>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+          <div style={{fontSize:7,letterSpacing:2,color:"#4a6046"}}>SESSION</div>
+          <div style={{fontSize:12,fontWeight:700,color:"#d4980f"}}>{gameState.session || 7}</div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+          <div style={{fontSize:7,letterSpacing:2,color:"#4a6046"}}>RTS DATE</div>
+          <div style={{fontSize:11,fontWeight:700,color:"#7bc47e",fontFamily:"'Courier New',monospace"}}>{rtsDate}</div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+          <div style={{fontSize:7,letterSpacing:2,color:"#4a6046"}}>REAL TIME</div>
+          <div style={{fontSize:11,color:"#d4980f",fontFamily:"'Courier New',monospace"}}>{clock}</div>
+        </div>
+        {myFaction && (
+          <>
+            <div style={{width:1,height:28,background:"#1e2419"}}/>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:10,height:10,borderRadius:"50%",background:myFaction.color}}/>
+              <div style={{fontSize:10,fontWeight:600,color:myFaction.color}}>{myFaction.name}</div>
+              <div style={{fontSize:9,color:IK_COLOR[myFaction.ik],border:`1px solid ${IK_COLOR[myFaction.ik]}`,padding:"1px 5px",opacity:.8}}>{IK_LBL[myFaction.ik]}</div>
+              <div style={{fontSize:9,color:moraleColor(currentUser.morale||100)}}>M:{currentUser.morale||100}</div>
+            </div>
+          </>
+        )}
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+          {isAdmin && <div style={{fontSize:8,letterSpacing:2,padding:"2px 8px",background:"rgba(184,124,10,.15)",border:"1px solid #d4980f",color:"#f0c040"}}>ADMIN</div>}
+          <div style={{fontSize:11,fontWeight:600}}>{currentUser?.displayName}</div>
+          <div style={{width:28,height:28,borderRadius:"50%",border:`2px solid ${myFaction?.color||"#3d7a3f"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:myFaction?.color||"#7bc47e"}}>{(currentUser?.displayName||"?")[0].toUpperCase()}</div>
+          <button onClick={()=>setScreen("login")} style={{fontSize:9,padding:"4px 8px",background:"transparent",border:"1px solid #1e2419",color:"#4a6046",cursor:"pointer"}}>OUT</button>
+        </div>
+      </div>
+      {/* NAV */}
+      <div style={{display:"flex",background:"#0f110e",borderBottom:"1px solid #1e2419",padding:"0 14px",flexShrink:0,overflowX:"auto",scrollbarWidth:"none"}}>
+        {PAGES.map(p => (
+          <button key={p.id} onClick={()=>setActivePage(p.id)}
+            style={{fontSize:9,letterSpacing:1.5,padding:"8px 14px",cursor:"pointer",color:activePage===p.id?(p.admin?"#f0c040":"#7bc47e"):"#4a6046",background:"none",border:"none",borderBottom:`2px solid ${activePage===p.id?(p.admin?"#d4980f":"#3d7a3f"):"transparent"}`,outline:"none",whiteSpace:"nowrap",textTransform:"uppercase",transition:"all .15s"}}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+      {/* NOTIFS */}
+      <div style={{position:"fixed",top:54,right:12,zIndex:9999,display:"flex",flexDirection:"column",gap:5}}>
+        {notifs.map(n => (
+          <div key={n.id} style={{padding:"8px 13px",fontSize:11,border:`1px solid ${n.type==="ok"?"#3d7a3f":n.type==="err"?"#8b1a1a":"#b87c0a"}`,background:"#141714",color:n.type==="ok"?"#7bc47e":n.type==="err"?"#e05050":"#f0c040",boxShadow:"0 3px 12px rgba(0,0,0,.8)",maxWidth:280}}>
+            {n.msg}
+          </div>
+        ))}
+      </div>
+      {/* PAGES */}
+      <div style={{flex:1,overflow:"hidden",position:"relative"}}>
+        {activePage === "map"       && <MapPage ctx={ctx} />}
+        {activePage === "ops"       && <OpsPage ctx={ctx} />}
+        {activePage === "vehicles"  && <VehiclesPage ctx={ctx} />}
+        {activePage === "techtree"  && <TechTreePage ctx={ctx} />}
+        {activePage === "divisions" && <DivisionsPage ctx={ctx} />}
+        {activePage === "market"    && <MarketPage ctx={ctx} />}
+        {activePage === "politics"  && <PoliticsPage ctx={ctx} />}
+        {activePage === "nations"   && <NationsPage ctx={ctx} />}
+        {activePage === "profile"   && <ProfilePage ctx={ctx} />}
+        {activePage === "timeline"  && <TimelinePage ctx={ctx} />}
+        {activePage === "calc"      && <CalcPage ctx={ctx} />}
+        {activePage === "ai"        && <AIPage ctx={ctx} />}
+        {activePage === "admin"     && isAdmin && <AdminPage ctx={ctx} />}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// LOGIN
+// ══════════════════════════════════════════════
+function LoginScreen({login, register}) {
+  const [tab, setTab] = useState("in");
+  const [user, setUser] = useState(""); const [pass, setPass] = useState("");
+  const [ru, setRu] = useState(""); const [rp, setRp] = useState(""); const [rn, setRn] = useState("");
+  const [err, setErr] = useState("");
+
+  const doLogin = async () => {
+    setErr("");
+    const ok = await login(user, pass);
+    if(!ok) setErr("Invalid username or password.");
+  };
+  const doReg = async () => {
+    setErr("");
+    if(ru.length < 3) { setErr("Username must be at least 3 characters."); return; }
+    if(rp.length < 4) { setErr("Password must be at least 4 characters."); return; }
+    const ok = await register(ru, rp, rn);
+    if(ok === "taken") setErr("Username already taken.");
+    else if(!ok) setErr("Registration failed.");
+  };
+
+  return (
+    <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"radial-gradient(ellipse at 30% 40%,rgba(61,122,63,.08) 0%,transparent 60%),#0a0b09"}}>
+      <div style={{background:"#0f110e",border:"1px solid #28312a",padding:40,width:380,boxShadow:"0 20px 60px rgba(0,0,0,.95)"}}>
+        <div style={{fontSize:9,letterSpacing:5,color:"#52a655",textAlign:"center",marginBottom:5}}>RTS COMMAND CENTER</div>
+        <div style={{fontSize:22,fontWeight:700,letterSpacing:3,textAlign:"center",marginBottom:3}}>OPERATIONS — 1949</div>
+        <div style={{fontSize:8,letterSpacing:2,color:"#4a6046",textAlign:"center",marginBottom:24}}>CLASSIFIED ACCESS ONLY</div>
+        <div style={{display:"flex",border:"1px solid #28312a",marginBottom:18}}>
+          {["in","reg"].map(t => (
+            <button key={t} onClick={()=>{setTab(t);setErr("");}}
+              style={{flex:1,padding:8,textAlign:"center",fontSize:10,letterSpacing:1.5,cursor:"pointer",color:tab===t?"#fff":"#4a6046",background:tab===t?"#3d7a3f":"none",border:"none"}}>
+              {t==="in"?"LOG IN":"REGISTER"}
+            </button>
+          ))}
+        </div>
+        {tab === "in" ? (
+          <>
+            <div style={{marginBottom:10}}><label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>USERNAME</label><input value={user} onChange={e=>setUser(e.target.value)} placeholder="callsign" onKeyDown={e=>e.key==="Enter"&&doLogin()} style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:12,padding:"7px 10px",outline:"none"}}/></div>
+            <div style={{marginBottom:10}}><label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>PASSWORD</label><input type="password" value={pass} onChange={e=>setPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doLogin()} style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:12,padding:"7px 10px",outline:"none"}}/></div>
+            <button onClick={doLogin} style={{width:"100%",marginTop:4,padding:"9px",background:"#3d7a3f",border:"1px solid #3d7a3f",color:"#fff",fontSize:12,cursor:"pointer",letterSpacing:1}}>ENTER COMMAND CENTER</button>
+          </>
+        ) : (
+          <>
+            <div style={{marginBottom:10}}><label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>USERNAME</label><input value={ru} onChange={e=>setRu(e.target.value)} placeholder="your_callsign" style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:12,padding:"7px 10px",outline:"none"}}/></div>
+            <div style={{marginBottom:10}}><label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>PASSWORD</label><input type="password" value={rp} onChange={e=>setRp(e.target.value)} style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:12,padding:"7px 10px",outline:"none"}}/></div>
+            <div style={{marginBottom:10}}><label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>PREFERRED NATION</label>
+              <select value={rn} onChange={e=>setRn(e.target.value)} style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:12,padding:"7px 10px",outline:"none"}}>
+                <option value="">— No preference —</option>
+                {FACTIONS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </div>
+            <button onClick={doReg} style={{width:"100%",marginTop:4,padding:"9px",background:"#3d7a3f",border:"1px solid #3d7a3f",color:"#fff",fontSize:12,cursor:"pointer",letterSpacing:1}}>CREATE ACCOUNT</button>
+          </>
+        )}
+        {err && <div style={{fontSize:10,color:"#e05050",textAlign:"center",marginTop:7}}>{err}</div>}
+        <div style={{marginTop:14,fontSize:9,color:"#4a6046",textAlign:"center"}}>Sessions Wed & Sat · July 1949 · Sprocket RTS</div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// SHARED UI COMPONENTS
+// ══════════════════════════════════════════════
+function Panel({title, titleColor, children, style}) {
+  return (
+    <div style={{background:"#0d100c",border:"1px solid #1e2419",padding:12,...style}}>
+      {title && <div style={{fontSize:9,letterSpacing:2,color:titleColor||"#4a6046",marginBottom:8,paddingBottom:6,borderBottom:"1px solid #1e2419",textTransform:"uppercase"}}>{title}</div>}
+      {children}
+    </div>
+  );
+}
+function Btn({children, onClick, variant="ghost", sm, style}) {
+  const vars = {
+    ghost:{background:"transparent",border:"1px solid #28312a",color:"#8aaa86"},
+    g:{background:"#3d7a3f",border:"1px solid #3d7a3f",color:"#fff"},
+    r:{background:"#8b1a1a",border:"1px solid #8b1a1a",color:"#fff"},
+    a:{background:"rgba(184,124,10,.15)",border:"1px solid #d4980f",color:"#f0c040"},
+    red_big:{background:"#c13030",border:"2px solid #e05050",color:"#fff",fontSize:14,fontWeight:700,letterSpacing:2,padding:"11px 22px"},
+  };
+  const v = vars[variant]||vars.ghost;
+  return <button onClick={onClick} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,padding:sm?"4px 9px":"7px 13px",fontSize:sm?10:11,cursor:"pointer",transition:"all .15s",...v,...style}}>{children}</button>;
+}
+function Tag({children, color}) {
+  return <span style={{fontSize:8,letterSpacing:1,padding:"1px 6px",border:`1px solid ${color}`,color,textTransform:"uppercase"}}>{children}</span>;
+}
+function ResRow({label, val, color}) {
+  return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"1px solid #1e2419",fontSize:11}}><span style={{color:"#4a6046"}}>{label}</span><span style={{fontWeight:600,color:color||"#c8d4c4"}}>{val}</span></div>;
+}
+function NatoSym({sym, cls}) {
+  const cols = {light:"#7bc47e",medium:"#d4980f",heavy:"#e05050",super:"#9060c0",spg:"#40a0a0",util:"#8aaa86"};
+  const c = cols[cls]||cols.util;
+  return <div style={{width:22,height:14,border:`1.5px solid ${c}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,fontFamily:"'Courier New',monospace",color:c,background:"rgba(0,0,0,.8)",flexShrink:0}}>{sym}</div>;
+}
+function Input({label, value, onChange, type="text", placeholder, style}) {
+  return (
+    <div style={{marginBottom:10,...style}}>
+      {label && <label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3,textTransform:"uppercase"}}>{label}</label>}
+      <input type={type} value={value} onChange={onChange} placeholder={placeholder}
+        style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:12,padding:"6px 9px",outline:"none"}}/>
+    </div>
+  );
+}
+function Select({label, value, onChange, options, style}) {
+  return (
+    <div style={{marginBottom:10,...style}}>
+      {label && <label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3,textTransform:"uppercase"}}>{label}</label>}
+      <select value={value} onChange={onChange} style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:12,padding:"6px 9px",outline:"none"}}>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// MAP PAGE
+// ══════════════════════════════════════════════
+function MapPage({ctx}) {
+  const {mapTiles, mapUnits, battles, isAdmin, saveTiles, saveUnits, saveBattles, showNotif, allUsers, currentUser} = ctx;
+  const [scale, setScale] = useState(1);
+  const [pos, setPos] = useState({x:0,y:0});
+  const [dragging, setDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({x:0,y:0});
+  const [dragOrigin, setDragOrigin] = useState({x:0,y:0});
+  const [showGrid, setShowGrid] = useState(true);
+  const [placingTile, setPlacingTile] = useState(false);
+  const [placingUnit, setPlacingUnit] = useState(false);
+  const [editTile, setEditTile] = useState(null);
+  const [editUnit, setEditUnit] = useState(null);
+  const [tooltip, setTooltip] = useState(null);
+  const wrapRef = useRef();
+  const GRID_W = 40; const GRID_H = 22;
+
+  const t = `translate(${pos.x}px,${pos.y}px) scale(${scale})`;
+
+  const onWheel = (e) => {
+    e.preventDefault();
+    const d = e.deltaY > 0 ? -0.12 : 0.12;
+    const r = wrapRef.current.getBoundingClientRect();
+    const cx = e.clientX - r.left, cy = e.clientY - r.top;
+    const prev = scale;
+    const ns = Math.max(0.4, Math.min(7, scale+d));
+    setPos({x: cx-(cx-pos.x)*(ns/prev), y: cy-(cy-pos.y)*(ns/prev)});
+    setScale(ns);
+  };
+
+  const onMD = (e) => {
+    if(placingTile || placingUnit) return;
+    setDragging(true); setDragStart({x:e.clientX,y:e.clientY}); setDragOrigin({...pos});
+  };
+  const onMM = (e) => {
+    if(!dragging) return;
+    setPos({x: dragOrigin.x+(e.clientX-dragStart.x), y: dragOrigin.y+(e.clientY-dragStart.y)});
+  };
+  const onMU = () => setDragging(false);
+
+  const clickMap = (e) => {
+    if(!isAdmin) return;
+    if(!placingTile && !placingUnit) return;
+    const img = wrapRef.current.querySelector("img");
+    const r = img.getBoundingClientRect();
+    const px = ((e.clientX-r.left)/r.width*100).toFixed(2);
+    const py = ((e.clientY-r.top)/r.height*100).toFixed(2);
+    if(placingTile) {
+      setEditTile({id:null, x:parseFloat(px), y:parseFloat(py), type:"blank", owner:"", name:"", status:"active"});
+      setPlacingTile(false);
+    } else if(placingUnit) {
+      setEditUnit({id:null, x:parseFloat(px), y:parseFloat(py), name:"", faction:"", unitType:"lt", count:10, speed:40});
+      setPlacingUnit(false);
+    }
+  };
+
+  const saveTile = async (tile) => {
+    let newTiles;
+    if(tile.id) newTiles = mapTiles.map(t => t.id===tile.id ? tile : t);
+    else newTiles = [...mapTiles, {...tile, id:Date.now()}];
+    await saveTiles(newTiles);
+    setEditTile(null);
+    showNotif("Tile saved","ok");
+  };
+  const deleteTile = async (id) => {
+    await saveTiles(mapTiles.filter(t=>t.id!==id));
+    setEditTile(null); showNotif("Tile deleted","ok");
+  };
+  const saveUnit = async (unit) => {
+    let newUnits;
+    if(unit.id) newUnits = mapUnits.map(u => u.id===unit.id ? unit : u);
+    else newUnits = [...mapUnits, {...unit, id:Date.now()}];
+    await saveUnits(newUnits);
+    setEditUnit(null); showNotif("Unit saved","ok");
+  };
+  const deleteUnit = async (id) => {
+    await saveUnits(mapUnits.filter(u=>u.id!==id));
+    setEditUnit(null); showNotif("Unit deleted","ok");
+  };
+  const endBattle = async (bid, winner) => {
+    const updated = battles.map(b => b.id===bid ? {...b, active:false, winner, ended:Date.now()} : b);
+    await saveBattles(updated);
+    showNotif(`Battle ended — ${winner} wins!`, "ok");
+  };
+
+  const activeBattles = battles.filter(b=>b.active);
+
+  return (
+    <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
+      {/* MAP */}
+      <div ref={wrapRef} style={{flex:1,position:"relative",overflow:"hidden",background:"#020a04",cursor:dragging?"grabbing":placingTile||placingUnit?"crosshair":"grab"}}
+        onWheel={onWheel} onMouseDown={onMD} onMouseMove={onMM} onMouseUp={onMU} onMouseLeave={onMU} onClick={clickMap}>
+        <img src="https://via.placeholder.com/1400x700/0a1408/1e2419?text=Theatre+Map+1949" alt="Map" draggable={false}
+          style={{position:"absolute",transformOrigin:"0 0",transform:t,filter:"saturate(.7) brightness(.75)",userSelect:"none",pointerEvents:"none"}}
+          onError={e=>{e.target.style.display="none";}}/>
+        {/* Grid */}
+        {showGrid && (
+          <svg style={{position:"absolute",inset:0,pointerEvents:"none",transform:t,transformOrigin:"0 0"}} width="100%" height="100%">
+            {Array.from({length:GRID_W+1},(_,i)=><line key={`v${i}`} x1={`${i/GRID_W*100}%`} y1="0" x2={`${i/GRID_W*100}%`} y2="100%" stroke="rgba(125,200,125,.08)" strokeWidth="0.5"/>)}
+            {Array.from({length:GRID_H+1},(_,i)=><line key={`h${i}`} x1="0" y1={`${i/GRID_H*100}%`} x2="100%" y2={`${i/GRID_H*100}%`} stroke="rgba(125,200,125,.08)" strokeWidth="0.5"/>)}
+          </svg>
+        )}
+        {/* Tile markers */}
+        {mapTiles.map(tile => {
+          const td = TILE_TYPES[tile.type]||TILE_TYPES.blank;
+          const fac = FACTIONS.find(f=>f.id===tile.owner);
+          const col = fac ? fac.color : TILE_COLORS[tile.type]||"#3e3820";
+          return (
+            <div key={tile.id} style={{position:"absolute",left:`${tile.x}%`,top:`${tile.y}%`,transform:"translate(-50%,-50%)",pointerEvents:"auto",zIndex:5,cursor:"pointer",textAlign:"center"}}
+              onMouseEnter={e=>setTooltip({tile,x:e.clientX,y:e.clientY})} onMouseLeave={()=>setTooltip(null)}
+              onClick={e=>{e.stopPropagation();isAdmin&&setEditTile(tile);}}>
+              <div style={{width:24,height:24,border:`2px solid ${col}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,background:"rgba(2,10,4,.9)",color:col,transition:"transform .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.transform="scale(1.25)"} onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>{td.icon}</div>
+              <div style={{fontSize:7,color:col,whiteSpace:"nowrap",textShadow:"0 1px 3px #000",maxWidth:60,overflow:"hidden",textOverflow:"ellipsis"}}>{tile.name}</div>
+            </div>
+          );
+        })}
+        {/* Unit markers */}
+        {mapUnits.map(unit => {
+          const fac = FACTIONS.find(f=>f.id===unit.faction);
+          const col = fac ? fac.color : "#7bc47e";
+          const ud = UNITS.find(u=>u.id===unit.unitType);
+          const inBattle = battles.some(b=>b.active&&(b.unit1===unit.id||b.unit2===unit.id));
+          return (
+            <div key={unit.id} style={{position:"absolute",left:`${unit.x}%`,top:`${unit.y}%`,transform:"translate(-50%,-50%)",zIndex:inBattle?15:8,cursor:"pointer",textAlign:"center",transition:"left .5s,top .5s"}}
+              onClick={e=>{e.stopPropagation();isAdmin&&setEditUnit(unit);}}>
+              <div style={{width:28,height:18,border:`2px solid ${col}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,fontFamily:"'Courier New',monospace",background:"rgba(0,0,0,.92)",color:col}}>{ud?.sym||"?"}</div>
+              <div style={{fontSize:7,color:col,whiteSpace:"nowrap"}}>{unit.name}</div>
+              <div style={{fontSize:7,color:"#4a6046"}}>{unit.count}×{ud?.abbr}</div>
+              {inBattle && <div style={{fontSize:7,color:"#ef5350",animation:"pulse 1s infinite"}}>⚔</div>}
+            </div>
+          );
+        })}
+        {/* Battle icons */}
+        {activeBattles.map(b => (
+          <div key={b.id} style={{position:"absolute",left:`${b.x}%`,top:`${b.y}%`,transform:"translate(-50%,-50%)",zIndex:20,textAlign:"center"}}>
+            <div style={{background:"rgba(139,26,26,.95)",border:"2px solid #e05050",padding:"4px 9px",fontSize:8,fontWeight:700,letterSpacing:1,color:"#e05050",animation:"pulse 1.5s infinite",whiteSpace:"nowrap"}}>⚔ ACTIVE BATTLE</div>
+            <div style={{fontSize:7,color:"#c13030",marginTop:1}}>{b.label||"Battle in progress"}</div>
+            {isAdmin && (
+              <div style={{display:"flex",gap:4,marginTop:4,justifyContent:"center"}}>
+                <Btn sm variant="g" onClick={()=>endBattle(b.id,"Attacker")}>ATK WINS</Btn>
+                <Btn sm variant="r" onClick={()=>endBattle(b.id,"Defender")}>DEF WINS</Btn>
+              </div>
+            )}
+          </div>
+        ))}
+        {/* Controls */}
+        <div style={{position:"absolute",top:10,left:10,display:"flex",flexDirection:"column",gap:4,zIndex:20}}>
+          {[["+",(()=>setScale(s=>Math.min(7,s+.2)))],["-",(()=>setScale(s=>Math.max(.4,s-.2))],["⌂",(()=>{setScale(1);setPos({x:0,y:0});})]].map(([lbl,fn])=>(
+            <button key={lbl} onClick={fn} style={{width:26,height:26,background:"rgba(10,11,9,.9)",border:"1px solid #28312a",color:"#8aaa86",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{lbl}</button>
+          ))}
+          <button onClick={()=>setShowGrid(!showGrid)} style={{width:26,height:26,background:showGrid?"rgba(61,122,63,.2)":"rgba(10,11,9,.9)",border:`1px solid ${showGrid?"#3d7a3f":"#28312a"}`,color:showGrid?"#7bc47e":"#4a6046",fontSize:9,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",letterSpacing:.5}}>⊞</button>
+        </div>
+        <div style={{position:"absolute",bottom:6,left:10,fontSize:8,letterSpacing:1,color:"rgba(125,200,125,.3)"}}>SCROLL ZOOM · DRAG PAN{isAdmin?" · CLICK +T/+U TO PLACE":""}</div>
+        {/* Tooltip */}
+        {tooltip && (
+          <div style={{position:"fixed",left:tooltip.x+12,top:tooltip.y-8,background:"#0f110e",border:"1px solid #d4980f",padding:"7px 11px",fontSize:10,zIndex:9999,pointerEvents:"none",boxShadow:"3px 3px 10px rgba(0,0,0,.85)"}}>
+            <div style={{fontWeight:600,fontSize:11,marginBottom:4,color:"#c8d4c4"}}>{tooltip.tile.name}</div>
+            <div style={{display:"flex",justifyContent:"space-between",gap:10,marginBottom:2,fontSize:9}}><span style={{color:"#4a6046"}}>Owner</span><span style={{color:"#8aaa86"}}>{FACTIONS.find(f=>f.id===tooltip.tile.owner)?.name||"Neutral"}</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",gap:10,marginBottom:2,fontSize:9}}><span style={{color:"#4a6046"}}>Type</span><span style={{color:"#8aaa86"}}>{TILE_TYPES[tooltip.tile.type]?.label}</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:9}}><span style={{color:"#4a6046"}}>Status</span><span style={{color:"#8aaa86"}}>{tooltip.tile.status||"active"}</span></div>
+          </div>
+        )}
+      </div>
+      {/* SIDEBAR */}
+      <div style={{width:250,flexShrink:0,borderLeft:"1px solid #1e2419",background:"#0f110e",overflowY:"auto",display:"flex",flexDirection:"column"}}>
+        {isAdmin && (
+          <div style={{padding:10,borderBottom:"1px solid #1e2419",display:"flex",flexDirection:"column",gap:5}}>
+            <div style={{fontSize:9,letterSpacing:2,color:"#4a6046",marginBottom:4}}>MAP TOOLS</div>
+            <div style={{display:"flex",gap:5}}>
+              <Btn sm variant="a" onClick={()=>{setPlacingTile(true);setPlacingUnit(false);}}>+TILE</Btn>
+              <Btn sm variant="a" onClick={()=>{setPlacingUnit(true);setPlacingTile(false);}}>+UNIT</Btn>
+              <Btn sm variant="ghost" onClick={()=>{setPlacingTile(false);setPlacingUnit(false);}}>CANCEL</Btn>
+            </div>
+            {(placingTile||placingUnit) && <div style={{fontSize:9,color:"#f0c040",padding:"4px 7px",background:"rgba(184,124,10,.1)",border:"1px solid #d4980f"}}>Click map to place {placingTile?"tile":"unit"}</div>}
+          </div>
+        )}
+        {/* Active battles */}
+        {activeBattles.length > 0 && (
+          <div style={{padding:10,borderBottom:"1px solid #1e2419",background:"rgba(139,26,26,.08)"}}>
+            <div style={{fontSize:9,letterSpacing:2,color:"#e05050",marginBottom:7}}>⚔ ACTIVE BATTLES ({activeBattles.length})</div>
+            {activeBattles.map(b => (
+              <div key={b.id} style={{padding:"6px 8px",border:"1px solid #8b1a1a",background:"rgba(139,26,26,.1)",marginBottom:5,fontSize:10}}>
+                <div style={{fontWeight:600,color:"#e05050",marginBottom:3}}>{b.label||"Battle"}</div>
+                <div style={{fontSize:9,color:"#4a6046"}}>{b.attacker} vs {b.defender}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Faction list */}
+        <div style={{padding:10,borderBottom:"1px solid #1e2419"}}>
+          <div style={{fontSize:9,letterSpacing:2,color:"#4a6046",marginBottom:7}}>FACTIONS</div>
+          {FACTIONS.map(f => (
+            <div key={f.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 7px",border:"1px solid #1e2419",marginBottom:3,background:"#0a0b09",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#28312a"} onMouseLeave={e=>e.currentTarget.style.borderColor="#1e2419"}>
+              <div style={{width:3,alignSelf:"stretch",background:f.color,flexShrink:0}}/>
+              <div style={{width:9,height:9,borderRadius:"50%",background:f.color,flexShrink:0}}/>
+              <div style={{flex:1,fontSize:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.short}</div>
+              <div style={{fontSize:8,border:`1px solid ${IK_COLOR[f.ik]}`,color:IK_COLOR[f.ik],padding:"1px 4px"}}>{IK_LBL[f.ik][0]}</div>
+              <div style={{fontSize:9,fontWeight:600,color:moraleColor(f.morale)}}>{f.morale}</div>
+            </div>
+          ))}
+        </div>
+        {/* Tile list */}
+        <div style={{padding:10}}>
+          <div style={{fontSize:9,letterSpacing:2,color:"#4a6046",marginBottom:7}}>TILES ({mapTiles.length})</div>
+          {mapTiles.map(t => {
+            const fac = FACTIONS.find(f=>f.id===t.owner);
+            return (
+              <div key={t.id} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 6px",border:"1px solid #1e2419",marginBottom:3,fontSize:9,cursor:"pointer"}} onClick={()=>isAdmin&&setEditTile(t)}>
+                {fac && <div style={{width:7,height:7,borderRadius:"50%",background:fac.color,flexShrink:0}}/>}
+                <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
+                <span style={{color:"#4a6046"}}>{TILE_TYPES[t.type]?.icon}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {/* TILE EDIT MODAL */}
+      {editTile && <TileEditModal tile={editTile} onSave={saveTile} onDelete={deleteTile} onClose={()=>setEditTile(null)} />}
+      {editUnit && <UnitEditModal unit={editUnit} onSave={saveUnit} onDelete={deleteUnit} onClose={()=>setEditUnit(null)} mapTiles={mapTiles} />}
+    </div>
+  );
+}
+
+function TileEditModal({tile, onSave, onDelete, onClose}) {
+  const [t, setT] = useState({...tile});
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:900,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
+      <div style={{background:"#0f110e",border:"1px solid #28312a",padding:18,width:460,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,.95)"}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontSize:13,fontWeight:600,letterSpacing:1,marginBottom:14,paddingBottom:9,borderBottom:"1px solid #1e2419"}}>{tile.id ? "EDIT TILE" : "+ PLACE NEW TILE"}</div>
+        <Input label="Tile Name" value={t.name} onChange={e=>setT({...t,name:e.target.value})} placeholder="e.g. Warsaw Factory"/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Select label="Type" value={t.type} onChange={e=>setT({...t,type:e.target.value})} options={Object.entries(TILE_TYPES).map(([k,v])=>({value:k,label:`${v.icon} ${v.label}`}))} />
+          <Select label="Owner Faction" value={t.owner||""} onChange={e=>setT({...t,owner:e.target.value})} options={[{value:"",label:"Neutral"},...FACTIONS.map(f=>({value:f.id,label:f.name}))]} />
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Select label="Status" value={t.status||"active"} onChange={e=>setT({...t,status:e.target.value})} options={["active","contested","destroyed","wasteland"].map(s=>({value:s,label:s.charAt(0).toUpperCase()+s.slice(1)}))} />
+          <Select label="Fort Level" value={t.fortLevel||0} onChange={e=>setT({...t,fortLevel:parseInt(e.target.value)})} options={[0,1,2,3,4].map(n=>({value:n,label:n===0?"None":`Level ${n}`}))} />
+        </div>
+        <Input label="Notes" value={t.notes||""} onChange={e=>setT({...t,notes:e.target.value})} placeholder="Optional notes"/>
+        <div style={{display:"flex",gap:7,justifyContent:"flex-end",marginTop:14,paddingTop:10,borderTop:"1px solid #1e2419"}}>
+          {tile.id && <Btn variant="r" sm onClick={()=>onDelete(tile.id)}>DELETE</Btn>}
+          <Btn variant="ghost" sm onClick={onClose}>CANCEL</Btn>
+          <Btn variant="g" sm onClick={()=>onSave(t)}>SAVE TILE</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UnitEditModal({unit, onSave, onDelete, onClose}) {
+  const [u, setU] = useState({...unit});
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:900,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
+      <div style={{background:"#0f110e",border:"1px solid #28312a",padding:18,width:460,maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:14,paddingBottom:9,borderBottom:"1px solid #1e2419"}}>{unit.id ? "EDIT UNIT" : "+ PLACE UNIT"}</div>
+        <Input label="Unit Name" value={u.name} onChange={e=>setU({...u,name:e.target.value})} placeholder="e.g. 1st Armoured Division"/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Select label="Faction" value={u.faction||""} onChange={e=>setU({...u,faction:e.target.value})} options={[{value:"",label:"—"},...FACTIONS.map(f=>({value:f.id,label:f.name}))]} />
+          <Select label="Primary Unit Type" value={u.unitType||"lt"} onChange={e=>setU({...u,unitType:e.target.value})} options={UNITS.map(u=>({value:u.id,label:`${u.sym} ${u.name}`}))} />
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Input label="Vehicle Count" type="number" value={u.count||0} onChange={e=>setU({...u,count:parseInt(e.target.value)||0})}/>
+          <Input label="Speed (km/h)" type="number" value={u.speed||40} onChange={e=>setU({...u,speed:parseInt(e.target.value)||40})}/>
+        </div>
+        <div style={{display:"flex",gap:7,justifyContent:"flex-end",marginTop:14,paddingTop:10,borderTop:"1px solid #1e2419"}}>
+          {unit.id && <Btn variant="r" sm onClick={()=>onDelete(unit.id)}>DELETE</Btn>}
+          <Btn variant="ghost" sm onClick={onClose}>CANCEL</Btn>
+          <Btn variant="g" sm onClick={()=>onSave(u)}>SAVE UNIT</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// OPS PAGE (Battle Planner + Timelapse)
+// ══════════════════════════════════════════════
+function OpsPage({ctx}) {
+  const {showNotif} = ctx;
+  const canvasRef = useRef();
+  const [tool, setTool] = useState("select");
+  const [strokes, setStrokes] = useState([]);
+  const [currentStroke, setCurrentStroke] = useState(null);
+  const [drawing, setDrawing] = useState(false);
+  const [frames, setFrames] = useState([]);
+  const [frameIdx, setFrameIdx] = useState(-1);
+  const [playing, setPlaying] = useState(false);
+  const [side, setSide] = useState("a");
+  const [counts, setCounts] = useState(() => Object.fromEntries(UNITS.map(u=>[u.id,{a:0,d:0}])));
+  const [filter, setFilter] = useState("all");
+  const [simResult, setSimResult] = useState(null);
+  const [artyCount, setArtyCount] = useState(8);
+  const [howType, setHowType] = useState("medium");
+  const [targetCls, setTargetCls] = useState("medium");
+  const playRef = useRef();
+
+  const TOOL_CFG = {
+    arrow:   {color:"rgba(123,196,126,.9)", lw:2.5},
+    defense: {color:"rgba(224,80,80,.9)",   lw:3, dash:[8,4]},
+    encircle:{color:"rgba(212,152,15,.85)", lw:2, dash:[5,5]},
+    supply:  {color:"rgba(64,160,160,.8)",  lw:1.5, dash:[10,6]},
+    text:    {color:"rgba(200,212,196,.9)", lw:1},
+  };
+
+  useEffect(() => {
+    const c = canvasRef.current; if(!c) return;
+    const resize = () => { c.width=c.offsetWidth||900; c.height=c.offsetHeight||480; redraw(strokes); };
+    resize(); window.addEventListener("resize",resize);
+    return () => window.removeEventListener("resize",resize);
+  }, [strokes]);
+
+  const redraw = (strokeList=[]) => {
+    const c = canvasRef.current; if(!c) return;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle="#060f0a"; ctx.fillRect(0,0,c.width,c.height);
+    ctx.strokeStyle="rgba(76,175,80,.04)"; ctx.lineWidth=1;
+    for(let x=0;x<c.width;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,c.height);ctx.stroke();}
+    for(let y=0;y<c.height;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(c.width,y);ctx.stroke();}
+    ctx.setLineDash([8,4]); ctx.strokeStyle="rgba(200,212,196,.08)"; ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(c.width/2,0);ctx.lineTo(c.width/2,c.height);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font="bold 42px 'Segoe UI'"; ctx.globalAlpha=.04;
+    ctx.fillStyle="#7bc47e"; ctx.fillText("ATTACK",14,c.height/2+16);
+    ctx.fillStyle="#e05050"; ctx.fillText("DEFEND",c.width/2+14,c.height/2+16);
+    ctx.globalAlpha=1;
+    strokeList.forEach(s=>drawStroke(ctx,s));
+  };
+
+  const drawStroke = (ctx, s) => {
+    if(!s||!s.pts||s.pts.length<2) return;
+    const cfg = TOOL_CFG[s.type]||TOOL_CFG.arrow;
+    ctx.save(); ctx.strokeStyle=cfg.color; ctx.lineWidth=cfg.lw;
+    ctx.setLineDash(cfg.dash||[]); ctx.lineCap="round"; ctx.lineJoin="round";
+    if(s.type==="encircle"){ctx.shadowColor=cfg.color;ctx.shadowBlur=10;ctx.globalAlpha=.85;}
+    ctx.beginPath(); ctx.moveTo(s.pts[0].x,s.pts[0].y);
+    if(s.type==="arrow"&&s.pts.length>3){
+      for(let i=1;i<s.pts.length-1;i++){const mx=(s.pts[i].x+s.pts[i+1].x)/2,my=(s.pts[i].y+s.pts[i+1].y)/2;ctx.quadraticCurveTo(s.pts[i].x,s.pts[i].y,mx,my);}
+    } else { s.pts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y)); }
+    if(s.type==="encircle"){ const d=Math.hypot(s.pts[s.pts.length-1].x-s.pts[0].x,s.pts[s.pts.length-1].y-s.pts[0].y); if(d<150) ctx.closePath(); }
+    ctx.stroke();
+    if(s.type==="arrow"&&s.pts.length>=2){
+      const l=s.pts[s.pts.length-1],p=s.pts[Math.max(0,s.pts.length-4)];
+      const a=Math.atan2(l.y-p.y,l.x-p.x);
+      ctx.setLineDash([]); ctx.lineWidth=2.5;
+      ctx.beginPath();ctx.moveTo(l.x,l.y);ctx.lineTo(l.x-16*Math.cos(a-.4),l.y-16*Math.sin(a-.4));
+      ctx.moveTo(l.x,l.y);ctx.lineTo(l.x-16*Math.cos(a+.4),l.y-16*Math.sin(a+.4));ctx.stroke();
+      ctx.fillStyle=cfg.color;ctx.beginPath();ctx.moveTo(l.x,l.y);
+      ctx.lineTo(l.x-12*Math.cos(a-.35),l.y-12*Math.sin(a-.35));
+      ctx.lineTo(l.x-12*Math.cos(a+.35),l.y-12*Math.sin(a+.35));ctx.closePath();ctx.fill();
+    }
+    if(s.type==="defense"){
+      ctx.setLineDash([]); ctx.lineWidth=1.5;
+      for(let i=0;i<s.pts.length-1;i+=20){
+        const p=s.pts[i],q=s.pts[Math.min(i+1,s.pts.length-1)];
+        const ang=Math.atan2(q.y-p.y,q.x-p.x)+Math.PI/2;
+        ctx.beginPath();ctx.moveTo(p.x+7*Math.cos(ang),p.y+7*Math.sin(ang));
+        ctx.lineTo(p.x-7*Math.cos(ang),p.y-7*Math.sin(ang));ctx.stroke();
+      }
+    }
+    if(s.type==="text"&&s.label){ctx.setLineDash([]);ctx.font="12px 'Courier New'";ctx.fillStyle=cfg.color;ctx.fillText(s.label,s.pts[0].x+4,s.pts[0].y-5);}
+    ctx.restore();
+  };
+
+  const onCMD = (e) => {
+    if(tool==="select") return;
+    setDrawing(true);
+    const r=canvasRef.current.getBoundingClientRect();
+    const x=e.clientX-r.left,y=e.clientY-r.top;
+    if(tool==="text"){const lbl=prompt("Label:");if(lbl){setStrokes(s=>[...s,{type:"text",color:TOOL_CFG.text.color,pts:[{x,y}],label:lbl}]);} return;}
+    setCurrentStroke({type:tool,color:TOOL_CFG[tool]?.color,pts:[{x,y}]});
+  };
+  const onCMM = (e) => {
+    if(!drawing||!currentStroke) return;
+    const r=canvasRef.current.getBoundingClientRect();
+    const ns={...currentStroke,pts:[...currentStroke.pts,{x:e.clientX-r.left,y:e.clientY-r.top}]};
+    setCurrentStroke(ns);
+    redraw([...strokes,ns]);
+  };
+  const onCMU = () => {
+    if(currentStroke){setStrokes(s=>[...s,currentStroke]);}
+    setCurrentStroke(null); setDrawing(false);
+  };
+
+  useEffect(()=>{redraw(strokes);},[strokes]);
+
+  const saveFrame = () => {
+    const newFrames = [...frames.slice(0,frameIdx+1),{strokes:JSON.parse(JSON.stringify(strokes)),label:`Frame ${frames.length+1}`}];
+    setFrames(newFrames); setFrameIdx(newFrames.length-1);
+    showNotif(`Frame ${newFrames.length} saved`,"ok");
+  };
+  const gotoFrame = (i) => { if(i<0||i>=frames.length) return; setFrameIdx(i); setStrokes(JSON.parse(JSON.stringify(frames[i].strokes))); };
+  const togglePlay = () => {
+    if(playing){clearInterval(playRef.current);setPlaying(false);}
+    else{setPlaying(true);playRef.current=setInterval(()=>{setFrameIdx(fi=>{if(fi>=frames.length-1){clearInterval(playRef.current);setPlaying(false);return fi;}gotoFrame(fi+1);return fi+1;});},1200);}
+  };
+
+  const chgCount = (id,s,d) => setCounts(c=>({...c,[id]:{...c[id],[s]:Math.max(0,(c[id][s]||0)+d)}}));
+  const simulate = () => {
+    let as=0,ds=0,ifv=0;
+    UNITS.forEach(u=>{const ca=counts[u.id]?.a||0,cd=counts[u.id]?.d||0;
+      const w=u.cls==="super"?2:u.cls==="heavy"?1.5:u.cls==="spg"?.8:1;
+      as+=ca*w;ds+=cd*w;if(u.id==="ifv")ifv+=ca;});
+    ds+=1.3;
+    const winner=as>ds*1.1?"ATTACKER LIKELY WINS":as<ds*.85?"DEFENDER LIKELY HOLDS":"CLOSE — UNCERTAIN";
+    setSimResult({winner, as:as.toFixed(1), ds:ds.toFixed(1), ifv, color:as>ds*1.1?"#7bc47e":as<ds*.85?"#e05050":"#ffb300"});
+  };
+
+  const artyRes = calcSPGDamage(artyCount, howType, targetCls);
+  const filteredUnits = filter==="all" ? UNITS : UNITS.filter(u=>u.cls===filter);
+
+  return (
+    <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
+      {/* ROSTER */}
+      <div style={{width:195,flexShrink:0,borderRight:"1px solid #1e2419",background:"#0f110e",overflowY:"auto",padding:8}}>
+        <div style={{display:"flex",gap:0,marginBottom:7}}>
+          {["a","d"].map(s=>(
+            <button key={s} onClick={()=>setSide(s)} style={{flex:1,padding:6,fontSize:9,letterSpacing:1,border:"1px solid #28312a",background:side===s?(s==="a"?"rgba(61,122,63,.2)":"rgba(139,26,26,.2)"):"#0a0b09",color:side===s?(s==="a"?"#7bc47e":"#e05050"):"#4a6046",cursor:"pointer"}}>
+              {s==="a"?"ATTACKER":"DEFENDER"}
+            </button>
+          ))}
+        </div>
+        <select value={filter} onChange={e=>setFilter(e.target.value)} style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#8aaa86",fontSize:10,padding:"4px 7px",outline:"none",marginBottom:8}}>
+          <option value="all">All Classes</option>
+          <option value="light">Light</option><option value="medium">Medium</option>
+          <option value="heavy">Heavy</option><option value="super">Super Heavy</option>
+          <option value="spg">SPG</option><option value="util">Utility</option>
+        </select>
+        {filteredUnits.map(u=>(
+          <div key={u.id} style={{padding:"5px 7px",background:"#0a0b09",border:"1px solid #1e2419",marginBottom:3,cursor:"grab"}}>
+            <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
+              <NatoSym sym={u.sym} cls={u.cls}/>
+              <span style={{fontSize:9,flex:1}}>{u.name}</span>
+              <span style={{fontSize:8,color:"#4a6046",fontFamily:"'Courier New',monospace"}}>{u.abbr}</span>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:3}}>
+              <span style={{fontSize:8,color:"#7bc47e"}}>A</span>
+              <button onClick={()=>chgCount(u.id,"a",-1)} style={{width:13,height:13,border:"1px solid #28312a",background:"#0f110e",color:"#8aaa86",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+              <span style={{fontSize:9,minWidth:16,textAlign:"center",fontWeight:600,color:"#7bc47e"}}>{counts[u.id]?.a||0}</span>
+              <button onClick={()=>chgCount(u.id,"a",1)} style={{width:13,height:13,border:"1px solid #28312a",background:"#0f110e",color:"#8aaa86",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+              <span style={{fontSize:8,color:"#e05050",marginLeft:3}}>D</span>
+              <button onClick={()=>chgCount(u.id,"d",-1)} style={{width:13,height:13,border:"1px solid #28312a",background:"#0f110e",color:"#8aaa86",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>−</button>
+              <span style={{fontSize:9,minWidth:16,textAlign:"center",fontWeight:600,color:"#e05050"}}>{counts[u.id]?.d||0}</span>
+              <button onClick={()=>chgCount(u.id,"d",1)} style={{width:13,height:13,border:"1px solid #28312a",background:"#0f110e",color:"#8aaa86",cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* CANVAS */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"stretch",background:"#0f110e",borderBottom:"1px solid #1e2419",flexShrink:0,overflowX:"auto"}}>
+          {["select","arrow","defense","encircle","supply","text"].map(t=>(
+            <button key={t} onClick={()=>setTool(t)} style={{fontSize:9,letterSpacing:1,padding:"7px 12px",border:"none",borderRight:"1px solid #1e2419",background:"transparent",color:tool===t?"#f0c040":"#4a6046",cursor:"pointer",textTransform:"uppercase",borderBottom:tool===t?"2px solid #d4980f":"2px solid transparent"}}>
+              {t==="select"?"✦ SELECT":t==="arrow"?"→ ATTACK":t==="defense"?"▬ DEFENSE":t==="encircle"?"◯ ENCIRCLE":t==="supply"?"⋯ SUPPLY":"T LABEL"}
+            </button>
+          ))}
+          <div style={{width:1,background:"#1e2419",alignSelf:"stretch",margin:"4px 0"}}/>
+          <button onClick={saveFrame} style={{fontSize:9,padding:"7px 12px",border:"none",borderRight:"1px solid #1e2419",background:"transparent",color:"#8aaa86",cursor:"pointer"}}>📷 SAVE FRAME</button>
+          <div style={{marginLeft:"auto",display:"flex"}}>
+            <button onClick={()=>setStrokes(s=>s.slice(0,-1))} style={{fontSize:9,padding:"7px 10px",border:"none",borderLeft:"1px solid #1e2419",background:"transparent",color:"#4a6046",cursor:"pointer"}}>↩ UNDO</button>
+            <button onClick={()=>setStrokes([])} style={{fontSize:9,padding:"7px 10px",border:"none",borderLeft:"1px solid #1e2419",background:"transparent",color:"#4a6046",cursor:"pointer"}}>✕ CLEAR</button>
+          </div>
+        </div>
+        {/* Timelapse */}
+        <div style={{display:"flex",alignItems:"center",gap:7,padding:"4px 9px",background:"rgba(0,0,0,.3)",borderBottom:"1px solid #1e2419",flexShrink:0}}>
+          <span style={{fontSize:8,letterSpacing:2,color:"#4a6046"}}>TIMELAPSE</span>
+          <div style={{display:"flex",gap:3}}>
+            {["◀","▶","▶▶"].map((lbl,i)=>(
+              <button key={i} onClick={i===0?()=>gotoFrame(frameIdx-1):i===1?togglePlay:()=>gotoFrame(frameIdx+1)} style={{width:20,height:20,border:"1px solid #28312a",background:i===1&&playing?"rgba(184,124,10,.15)":"#0a0b09",color:"#8aaa86",cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>{lbl}</button>
+            ))}
+          </div>
+          <div style={{flex:1,height:4,background:"#0a0b09",border:"1px solid #28312a",position:"relative",cursor:"pointer"}} onClick={e=>{if(!frames.length)return;const r=e.currentTarget.getBoundingClientRect();const p=(e.clientX-r.left)/r.width;gotoFrame(Math.round(p*(frames.length-1)));}}>
+            <div style={{height:"100%",background:"#d4980f",width:frames.length>1?`${frameIdx/(frames.length-1)*100}%`:"0%",transition:"width .3s"}}/>
+            {frames.map((_,i)=><div key={i} style={{position:"absolute",top:"50%",left:`${frames.length<=1?50:i/(frames.length-1)*100}%`,transform:"translate(-50%,-50%)",width:8,height:8,borderRadius:"50%",background:i===frameIdx?"#d4980f":"#4a6046",border:"1.5px solid #0f110e",cursor:"pointer"}} onClick={e=>{e.stopPropagation();gotoFrame(i);}}/>)}
+          </div>
+          <span style={{fontSize:9,color:"#d4980f",minWidth:70}}>FRAME {Math.max(0,frameIdx+1)}/{frames.length}</span>
+          <button onClick={()=>{setFrames([]);setFrameIdx(-1);}} style={{fontSize:8,padding:"3px 7px",border:"1px solid #28312a",background:"transparent",color:"#4a6046",cursor:"pointer"}}>CLEAR</button>
+        </div>
+        <canvas ref={canvasRef} style={{flex:1,display:"block",cursor:tool==="select"?"default":"crosshair"}}
+          onMouseDown={onCMD} onMouseMove={onCMM} onMouseUp={onCMU} onMouseLeave={onCMU}/>
+      </div>
+      {/* RIGHT */}
+      <div style={{width:240,flexShrink:0,borderLeft:"1px solid #1e2419",background:"#0f110e",overflowY:"auto",padding:9,display:"flex",flexDirection:"column",gap:9}}>
+        <Panel title="Lineup Stats">
+          {["a","d"].flatMap(s=>[
+            <ResRow key={`${s}-cnt`} label={`${s==="a"?"ATK":"DEF"} Units`} val={Object.values(counts).reduce((t,c)=>t+(c[s]||0),0)} color={s==="a"?"#7bc47e":"#e05050"}/>,
+          ])}
+          <div style={{display:"flex",gap:5,marginTop:7}}>
+            <Btn sm variant="g" onClick={simulate}>SIMULATE</Btn>
+            <Btn sm variant="ghost" onClick={()=>{setCounts(Object.fromEntries(UNITS.map(u=>[u.id,{a:0,d:0}])));setSimResult(null);}}>CLEAR</Btn>
+          </div>
+          {simResult && <div style={{marginTop:7,padding:7,border:`1px solid ${simResult.color}`,background:"rgba(0,0,0,.4)",textAlign:"center"}}>
+            <div style={{fontWeight:700,fontSize:12,color:simResult.color,letterSpacing:1}}>{simResult.winner}</div>
+            <div style={{fontSize:9,color:"#4a6046",marginTop:3}}>ATK {simResult.as} vs DEF {simResult.ds}</div>
+          </div>}
+        </Panel>
+        <Panel title="SPG Fire Calc" titleColor="#d4980f">
+          <div style={{marginBottom:8}}><label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>SPG COUNT</label><input type="number" min={1} max={16} value={artyCount} onChange={e=>setArtyCount(parseInt(e.target.value)||0)} style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:12,padding:"5px 8px",outline:"none"}}/></div>
+          <div style={{marginBottom:8}}><label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>HOWITZER TYPE</label>
+            <select value={howType} onChange={e=>setHowType(e.target.value)} style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:12,padding:"5px 8px",outline:"none"}}>
+              <option value="light">Light (75–122mm)</option><option value="medium">Medium (170mm)</option>
+              <option value="heavy">Heavy (210mm+)</option><option value="antifort">Anti-Fort</option>
+            </select>
+          </div>
+          <div style={{marginBottom:8}}><label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>TARGET CLASS</label>
+            <select value={targetCls} onChange={e=>setTargetCls(e.target.value)} style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:12,padding:"5px 8px",outline:"none"}}>
+              <option value="light">Light</option><option value="medium">Medium</option>
+              <option value="heavy">Heavy</option><option value="super">Super Heavy</option>
+            </select>
+          </div>
+          <ResRow label="Damage" val={`${artyRes.pct}%`} color={artyRes.pct>16?"#e05050":"#ffb300"}/>
+          <ResRow label="Est. Kills" val={`~${artyRes.kills} vehicles`}/>
+          <ResRow label="Effectiveness" val={artyRes.eff} color={artyRes.eff==="SUPERIOR"?"#7bc47e":artyRes.eff==="OPTIMAL"?"#c8d4c4":"#e05050"}/>
+        </Panel>
+        <Panel title="Legend">
+          <div style={{fontSize:9,lineHeight:2,color:"#8aaa86"}}>
+            <span style={{color:"#7bc47e"}}>━━▶</span> Attack arrow<br/>
+            <span style={{color:"#e05050"}}>╌╌╌</span> Defense line<br/>
+            <span style={{color:"#d4980f"}}>◯◯◯</span> Encirclement<br/>
+            <span style={{color:"#40a0a0"}}>····</span> Supply route<br/>
+            Dbl-click unit to remove
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// VEHICLES PAGE
+// ══════════════════════════════════════════════
+function VehiclesPage({ctx}) {
+  const {currentUser, isAdmin, allUsers, saveUser, showNotif} = ctx;
+  const [selectedUser, setSelectedUser] = useState(isAdmin ? null : currentUser);
+  const [editMode, setEditMode] = useState(false);
+  const [tankEdits, setTankEdits] = useState({});
+  const [battleUnit, setBattleUnit] = useState("");
+  const [battleLoss, setBattleLoss] = useState(1);
+  const [buildUnit, setBuildUnit] = useState("lt");
+  const [buildCount, setBuildCount] = useState(1);
+
+  const user = isAdmin ? selectedUser : currentUser;
+  const tanks = user?.tanks || {};
+  const res = user?.resources || {bp:0,rp:0,g:0,f:0};
+
+  const getBuildCost = (uid, cnt) => {
+    const u = UNITS.find(x=>x.id===uid); if(!u) return {bp:0,g:0};
+    return {bp: parseFloat((u.bp*cnt).toFixed(2)), g: parseFloat((u.g*cnt).toFixed(2))};
+  };
+
+  const buildVehicles = async () => {
+    if(!user) return;
+    const cost = getBuildCost(buildUnit, buildCount);
+    if(res.bp < cost.bp) { showNotif("Not enough BP","err"); return; }
+    if(res.g < cost.g) { showNotif("Not enough Gold","err"); return; }
+    const updated = {...user,
+      tanks: {...tanks, [buildUnit]: (tanks[buildUnit]||0) + buildCount},
+      resources: {...res, bp: parseFloat((res.bp-cost.bp).toFixed(2)), g: parseFloat((res.g-cost.g).toFixed(2))}
+    };
+    await saveUser(updated);
+    showNotif(`Built ${buildCount}× ${UNITS.find(u=>u.id===buildUnit)?.name}. Cost: ${cost.bp}BP ${cost.g}G`, "ok");
+  };
+
+  const deductBattle = async () => {
+    if(!user || !battleUnit) return;
+    const cur = tanks[battleUnit]||0;
+    if(battleLoss > cur) { showNotif(`Only ${cur} available`,"err"); return; }
+    const updated = {...user, tanks: {...tanks, [battleUnit]: cur - battleLoss}};
+    await saveUser(updated);
+    showNotif(`Deducted ${battleLoss}× ${UNITS.find(u=>u.id===battleUnit)?.name} (battle losses)`, "ok");
+  };
+
+  const saveManualEdits = async () => {
+    if(!user) return;
+    const newTanks = {...tanks};
+    Object.entries(tankEdits).forEach(([id,v])=>{ if(v !== "") newTanks[id] = Math.max(0,parseInt(v)||0); });
+    const updated = {...user, tanks:newTanks};
+    await saveUser(updated);
+    setTankEdits({}); setEditMode(false);
+    showNotif("Roster updated","ok");
+  };
+
+  const totalVehicles = Object.values(tanks).reduce((a,b)=>a+(b||0),0);
+
+  return (
+    <div style={{height:"100%",overflowY:"auto",padding:14}}>
+      {isAdmin && (
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:9,letterSpacing:2,color:"#4a6046",marginBottom:7}}>SELECT PLAYER TO MANAGE</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {allUsers.map(u=>(
+              <button key={u.username} onClick={()=>{setSelectedUser(u);setTankEdits({});setEditMode(false);}}
+                style={{padding:"5px 11px",fontSize:10,border:`1px solid ${selectedUser?.username===u.username?"#3d7a3f":"#28312a"}`,background:selectedUser?.username===u.username?"rgba(61,122,63,.15)":"#0a0b09",color:selectedUser?.username===u.username?"#7bc47e":"#8aaa86",cursor:"pointer"}}>
+                {u.displayName}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {user ? (
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
+          {/* Resources */}
+          <Panel title="Resource Stockpile" titleColor="#d4980f">
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+              {[["Build Points (BP)","#42a5f5",res.bp],["Research Points (RP)","#66bb6a",res.rp],["Gold (G)","#ffb300",res.g],["Fuel (F)","#90a4ae",res.f]].map(([lbl,col,val])=>(
+                <div key={lbl} style={{padding:10,border:"1px solid #1e2419",background:"#0a0b09",textAlign:"center"}}>
+                  <div style={{fontSize:8,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>{lbl}</div>
+                  <div style={{fontSize:24,fontWeight:700,color:col}}>{parseFloat(val||0).toFixed(1)}</div>
+                </div>
+              ))}
+            </div>
+            {isAdmin && (
+              <>
+                <div style={{fontSize:9,letterSpacing:1.5,color:"#d4980f",marginBottom:7}}>EDIT RESOURCES</div>
+                {["bp","rp","g","f"].map(r2=>(
+                  <div key={r2} style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
+                    <span style={{fontSize:10,color:"#8aaa86",width:28,textAlign:"right"}}>{r2.toUpperCase()}</span>
+                    <input type="number" step="0.5" defaultValue={res[r2]||0} id={`res-${r2}`} style={{flex:1,background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:11,padding:"4px 7px",outline:"none"}}/>
+                  </div>
+                ))}
+                <Btn variant="g" sm onClick={async()=>{
+                  const newRes={bp:parseFloat(document.getElementById("res-bp")?.value||0),rp:parseFloat(document.getElementById("res-rp")?.value||0),g:parseFloat(document.getElementById("res-g")?.value||0),f:parseFloat(document.getElementById("res-f")?.value||0)};
+                  await saveUser({...user,resources:newRes}); showNotif("Resources updated","ok");
+                }}>SAVE RESOURCES</Btn>
+              </>
+            )}
+          </Panel>
+
+          {/* Build vehicles */}
+          <Panel title="Build Vehicles">
+            <div style={{marginBottom:8}}>
+              <label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>VEHICLE TYPE</label>
+              <select value={buildUnit} onChange={e=>setBuildUnit(e.target.value)} style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:11,padding:"5px 8px",outline:"none"}}>
+                {UNITS.map(u=><option key={u.id} value={u.id}>{u.sym} {u.name} — {u.bp}BP {u.g>0?`${u.g}G`:""}</option>)}
+              </select>
+            </div>
+            <Input label="Quantity" type="number" value={buildCount} onChange={e=>setBuildCount(Math.max(1,parseInt(e.target.value)||1))}/>
+            <div style={{padding:"7px 9px",background:"rgba(0,0,0,.3)",border:"1px solid #28312a",marginBottom:8,fontSize:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{color:"#4a6046"}}>Total Cost</span><span style={{color:"#ffb300",fontWeight:700}}>{getBuildCost(buildUnit,buildCount).bp} BP {getBuildCost(buildUnit,buildCount).g>0?`+ ${getBuildCost(buildUnit,buildCount).g} G`:""}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#4a6046"}}>Your BP</span><span style={{color:res.bp>=getBuildCost(buildUnit,buildCount).bp?"#7bc47e":"#e05050"}}>{parseFloat(res.bp||0).toFixed(1)}</span></div>
+            </div>
+            <Btn variant="g" onClick={buildVehicles} style={{width:"100%"}}>BUILD VEHICLES</Btn>
+          </Panel>
+
+          {/* Battle deduction */}
+          <Panel title="Battle Deduction" titleColor="#e05050">
+            <div style={{fontSize:9,color:"#8aaa86",marginBottom:9,lineHeight:1.6}}>Select vehicle type and quantity lost in battle. Press button to deduct from roster.</div>
+            <div style={{marginBottom:8}}>
+              <label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>VEHICLE TYPE LOST</label>
+              <select value={battleUnit} onChange={e=>setBattleUnit(e.target.value)} style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:11,padding:"5px 8px",outline:"none"}}>
+                <option value="">— Select —</option>
+                {UNITS.filter(u=>(tanks[u.id]||0)>0).map(u=><option key={u.id} value={u.id}>{u.sym} {u.name} (have: {tanks[u.id]||0})</option>)}
+              </select>
+            </div>
+            <Input label="Quantity Lost" type="number" value={battleLoss} onChange={e=>setBattleLoss(Math.max(1,parseInt(e.target.value)||1))}/>
+            <button onClick={deductBattle} style={{width:"100%",padding:11,background:"#c13030",border:"2px solid #e05050",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",letterSpacing:2}}>⚔ DEDUCT BATTLE LOSSES</button>
+          </Panel>
+
+          {/* Vehicle roster */}
+          <Panel title={`Vehicle Roster — ${totalVehicles} total`} style={{gridColumn:"span 3"}}>
+            <div style={{display:"flex",gap:7,marginBottom:10}}>
+              {isAdmin && <Btn sm variant="a" onClick={()=>setEditMode(!editMode)}>{editMode?"CANCEL EDIT":"EDIT ROSTER"}</Btn>}
+              {editMode && <Btn sm variant="g" onClick={saveManualEdits}>SAVE CHANGES</Btn>}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))",gap:7}}>
+              {UNITS.map(u=>{
+                const cnt = tanks[u.id]||0;
+                if(!editMode && cnt === 0) return null;
+                return (
+                  <div key={u.id} style={{display:"flex",alignItems:"center",gap:7,padding:"7px 9px",border:`1px solid ${cnt>0?"#28312a":"#1e2419"}`,background:"#0a0b09"}}>
+                    <NatoSym sym={u.sym} cls={u.cls}/>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:10}}>{u.name}</div>
+                      <div style={{fontSize:8,color:"#4a6046"}}>{u.maint}% maint</div>
+                    </div>
+                    {editMode ? (
+                      <input type="number" min={0} value={tankEdits[u.id]!==undefined?tankEdits[u.id]:cnt}
+                        onChange={e=>setTankEdits(t=>({...t,[u.id]:e.target.value}))}
+                        style={{width:50,background:"#0a0b09",border:"1px solid #d4980f",color:"#f0c040",fontSize:12,padding:"2px 5px",outline:"none",textAlign:"center"}}/>
+                    ) : (
+                      <div style={{fontSize:18,fontWeight:700,color:"#d4980f"}}>{cnt}</div>
+                    )}
+                  </div>
+                );
+              })}
+              {!editMode && totalVehicles === 0 && <div style={{gridColumn:"span 4",color:"#4a6046",fontSize:11,padding:14,textAlign:"center"}}>No vehicles in roster. Build some above or ask admin to add them.</div>}
+            </div>
+          </Panel>
+        </div>
+      ) : (
+        <div style={{color:"#4a6046",textAlign:"center",padding:40,fontSize:12}}>Select a player above to manage their vehicles.</div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// TECH TREE PAGE
+// ══════════════════════════════════════════════
+function TechTreePage({ctx}) {
+  const {currentUser, isAdmin, saveUser, showNotif} = ctx;
+  const [activeIk, setActiveIk] = useState(currentUser?.ideology || "capitalism");
+  const [zoom, setZoom] = useState(false);
+
+  const playerIk = currentUser?.ideology;
+  const canResearch = !isAdmin && playerIk === activeIk;
+
+  return (
+    <div style={{height:"100%",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{display:"flex",background:"#0f110e",borderBottom:"1px solid #1e2419",padding:"0 14px",flexShrink:0}}>
+        {["capitalism","communism","fascism","monarchy"].map(ik=>(
+          <button key={ik} onClick={()=>setActiveIk(ik)}
+            style={{fontSize:10,letterSpacing:1.5,padding:"8px 16px",cursor:"pointer",color:activeIk===ik?IK_COLOR[ik]:"#4a6046",background:"none",border:"none",borderBottom:`2px solid ${activeIk===ik?IK_COLOR[ik]:"transparent"}`,outline:"none",textTransform:"uppercase",transition:"all .15s"}}>
+            {IK_LBL[ik]}
+            {playerIk === ik && <span style={{marginLeft:5,fontSize:7,color:IK_COLOR[ik]}}>(YOURS)</span>}
+          </button>
+        ))}
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+          <button onClick={()=>setZoom(!zoom)} style={{fontSize:9,padding:"4px 10px",border:"1px solid #28312a",background:"transparent",color:"#8aaa86",cursor:"pointer"}}>{zoom?"ZOOM OUT":"ZOOM IN"}</button>
+        </div>
+      </div>
+      <div style={{flex:1,overflow:"auto",padding:14}}>
+        {/* Tree image */}
+        <div style={{marginBottom:16,border:"1px solid #28312a",overflow:"hidden",background:"#020a04",position:"relative"}}>
+          <div style={{padding:"6px 10px",background:"#0f110e",borderBottom:"1px solid #1e2419",fontSize:9,letterSpacing:2,color:IK_COLOR[activeIk]}}>{IK_LBL[activeIk].toUpperCase()} TECH TREE</div>
+          <div style={{overflow:"auto",maxHeight:zoom?"none":400,cursor:"zoom-in"}} onClick={()=>setZoom(!zoom)}>
+            <img src={`/tree_${activeIk}.png`} alt={`${activeIk} tech tree`} style={{width:"100%",display:"block",filter:"brightness(.9) saturate(.85)"}}
+              onError={e=>{ e.target.style.display="none"; e.target.nextSibling.style.display="block"; }}/>
+            <div style={{display:"none",padding:30,color:"#4a6046",textAlign:"center",fontSize:12}}>
+              Tech tree image not found. Place <code style={{color:"#d4980f"}}>tree_{activeIk}.png</code> in your site folder.
+            </div>
+          </div>
+          {!zoom && <div style={{position:"absolute",bottom:0,left:0,right:0,height:40,background:"linear-gradient(transparent,rgba(2,10,4,.8))",pointerEvents:"none",display:"flex",alignItems:"flex-end",justifyContent:"center",paddingBottom:8}}><span style={{fontSize:9,color:"#4a6046"}}>Click to expand</span></div>}
+        </div>
+
+        {/* Vehicle prices for this ideology */}
+        <Panel title={`${IK_LBL[activeIk]} Vehicle Prices`} titleColor={IK_COLOR[activeIk]}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>
+            {UNITS.map(u=>(
+              <div key={u.id} style={{display:"flex",alignItems:"center",gap:7,padding:"7px 9px",border:"1px solid #1e2419",background:"#0a0b09"}}>
+                <NatoSym sym={u.sym} cls={u.cls}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:10}}>{u.name}</div>
+                  <div style={{fontSize:8,color:"#4a6046"}}>{u.abbr} · spd:{u.spd}km/h</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#42a5f5"}}>{u.bp}BP</div>
+                  {u.g>0 && <div style={{fontSize:9,color:"#ffb300"}}>{u.g}G</div>}
+                  <div style={{fontSize:8,color:"#4a6046"}}>{u.maint}% maint</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        {canResearch && (
+          <Panel title="Research Progress" style={{marginTop:14}}>
+            <div style={{fontSize:10,color:"#8aaa86",marginBottom:10}}>Your researched techs for {IK_LBL[playerIk]}. Click to research (costs RP + G).</div>
+            <div style={{color:"#4a6046",fontSize:11}}>Tech research tracking coming soon. Ask admin to unlock specific techs for your account.</div>
+          </Panel>
+        )}
+        {isAdmin && (
+          <Panel title="Admin: Tech Tree Notes" titleColor="#d4980f" style={{marginTop:14}}>
+            <div style={{fontSize:10,color:"#8aaa86",lineHeight:1.8}}>
+              The tech tree images above are loaded from <code style={{color:"#d4980f"}}>tree_capitalism.png</code>, <code style={{color:"#d4980f"}}>tree_communism.png</code>, <code style={{color:"#d4980f"}}>tree_fascism.png</code>, <code style={{color:"#d4980f"}}>tree_monarchy.png</code> in your site folder.<br/><br/>
+              Place the tech tree PNG files alongside <code style={{color:"#d4980f"}}>index.html</code> and they will display here. When you update the trees, just replace the PNG files.
+            </div>
+          </Panel>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// DIVISIONS PAGE
+// ══════════════════════════════════════════════
+function DivisionsPage({ctx}) {
+  const {currentUser, isAdmin, saveUser, showNotif, allUsers} = ctx;
+  const [showForm, setShowForm] = useState(false);
+  const [newDiv, setNewDiv] = useState({name:"",region:"",color:"#3d7a3f",units:{}});
+
+  const myDivs = currentUser?.divisions || [];
+
+  const createDiv = async () => {
+    if(!newDiv.name) { showNotif("Enter division name","err"); return; }
+    const units = Object.entries(newDiv.units).filter(([,v])=>parseInt(v)>0).map(([id,v])=>({id,count:parseInt(v)}));
+    const div = {id:Date.now(), ...newDiv, units, created:Date.now()};
+    const updated = {...currentUser, divisions:[...myDivs, div]};
+    await saveUser(updated);
+    setNewDiv({name:"",region:"",color:"#3d7a3f",units:{}});
+    setShowForm(false);
+    showNotif("Division created","ok");
+  };
+
+  return (
+    <div style={{height:"100%",overflowY:"auto",padding:14}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+        <h2 style={{fontSize:15,letterSpacing:2}}>DIVISION REGISTRY</h2>
+        <Btn variant="g" sm onClick={()=>setShowForm(!showForm)}>+ NEW DIVISION</Btn>
+      </div>
+      {showForm && (
+        <Panel style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:600,letterSpacing:1,marginBottom:12}}>CREATE NEW DIVISION</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <Input label="Division Name" value={newDiv.name} onChange={e=>setNewDiv({...newDiv,name:e.target.value})} placeholder="e.g. 1st Armoured Division"/>
+            <Input label="Assigned Region" value={newDiv.region} onChange={e=>setNewDiv({...newDiv,region:e.target.value})} placeholder="e.g. Balkans"/>
+          </div>
+          <div style={{marginBottom:10}}><label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>COLOUR</label><input type="color" value={newDiv.color} onChange={e=>setNewDiv({...newDiv,color:e.target.value})} style={{width:50,height:28,border:"1px solid #28312a",background:"none",cursor:"pointer"}}/></div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:7}}>ASSIGN VEHICLES</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
+              {UNITS.map(u=>(
+                <div key={u.id} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 6px",border:"1px solid #1e2419",background:"#0a0b09",fontSize:9}}>
+                  <NatoSym sym={u.sym} cls={u.cls}/>
+                  <span style={{flex:1}}>{u.abbr}</span>
+                  <input type="number" min={0} value={newDiv.units[u.id]||0} onChange={e=>setNewDiv({...newDiv,units:{...newDiv.units,[u.id]:e.target.value}})}
+                    style={{width:38,background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:10,padding:"2px 4px",outline:"none",textAlign:"center"}}/>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{display:"flex",gap:7}}><Btn variant="g" onClick={createDiv}>CREATE DIVISION</Btn><Btn variant="ghost" onClick={()=>setShowForm(false)}>CANCEL</Btn></div>
+        </Panel>
+      )}
+      {myDivs.length === 0 ? (
+        <div style={{color:"#4a6046",textAlign:"center",padding:40,fontSize:12}}>No divisions created yet. Click + NEW DIVISION to create one.</div>
+      ) : (
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
+          {myDivs.map(d=>(
+            <div key={d.id} style={{padding:12,border:"1px solid #1e2419",background:"#0f110e",borderLeft:`4px solid ${d.color}`}}>
+              <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>{d.name}</div>
+              <div style={{fontSize:10,color:"#4a6046",marginBottom:8}}>{d.region||"Region unassigned"}</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+                {d.units.map(u=>{const ud=UNITS.find(x=>x.id===u.id);return ud?<div key={u.id} style={{padding:"2px 6px",border:"1px solid #28312a",fontSize:9,fontFamily:"'Courier New',monospace",color:"#8aaa86"}}>{u.count}×{ud.abbr}</div>:null;})}
+              </div>
+              <div style={{fontSize:9,color:"#4a6046"}}>Total: {d.units.reduce((a,u)=>a+u.count,0)} vehicles</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// MARKET PAGE
+// ══════════════════════════════════════════════
+function MarketPage({ctx}) {
+  const {trades, saveTrades, currentUser, showNotif} = ctx;
+  const [showForm, setShowForm] = useState(false);
+  const [newTrade, setNewTrade] = useState({type:"resource",price:"",desc:""});
+
+  const postTrade = async () => {
+    if(!newTrade.price || !newTrade.desc) { showNotif("Fill in price and description","err"); return; }
+    const fac = FACTIONS.find(f=>f.id===currentUser?.nation);
+    const trade = {id:Date.now(), type:newTrade.type, seller:currentUser?.displayName, sellerNation:fac?.short||"—", price:newTrade.price, desc:newTrade.desc, posted:Date.now(), open:true};
+    await saveTrades([...trades, trade]);
+    setNewTrade({type:"resource",price:"",desc:""});
+    setShowForm(false);
+    showNotif("Trade posted","ok");
+  };
+
+  const acceptTrade = async (id) => {
+    if(!window.confirm("Accept this trade?")) return;
+    await saveTrades(trades.filter(t=>t.id!==id));
+    showNotif("Trade accepted! Contact the seller to complete.","ok");
+  };
+
+  const cancelTrade = async (id) => {
+    await saveTrades(trades.filter(t=>t.id!==id));
+    showNotif("Trade cancelled","ok");
+  };
+
+  const byType = (type) => trades.filter(t=>t.type===type&&t.open);
+
+  return (
+    <div style={{height:"100%",overflowY:"auto",padding:14}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+        <div><h2 style={{fontSize:15,letterSpacing:2,marginBottom:3}}>MARKET BOARD</h2><div style={{fontSize:9,color:"#4a6046"}}>⚠ Cannot trade with nations currently at war (2 session cooldown after hostilities end)</div></div>
+        <Btn variant="g" sm onClick={()=>setShowForm(!showForm)}>+ POST TRADE</Btn>
+      </div>
+      {showForm && (
+        <Panel style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:600,marginBottom:12}}>POST TRADE OFFER</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Select label="Trade Type" value={newTrade.type} onChange={e=>setNewTrade({...newTrade,type:e.target.value})} options={["resource","vehicle","commission"].map(t=>({value:t,label:t.charAt(0).toUpperCase()+t.slice(1)}))}/>
+            <Input label="Price / Payment" value={newTrade.price} onChange={e=>setNewTrade({...newTrade,price:e.target.value})} placeholder="e.g. 3G, 5BP"/>
+          </div>
+          <Input label="Description" value={newTrade.desc} onChange={e=>setNewTrade({...newTrade,desc:e.target.value})} placeholder="Describe your offer..."/>
+          <div style={{display:"flex",gap:7}}><Btn variant="g" onClick={postTrade}>POST</Btn><Btn variant="ghost" onClick={()=>setShowForm(false)}>CANCEL</Btn></div>
+        </Panel>
+      )}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
+        {["resource","vehicle","commission"].map(type=>(
+          <div key={type}>
+            <div style={{fontSize:9,letterSpacing:2,color:"#4a6046",marginBottom:10,paddingBottom:5,borderBottom:"1px solid #1e2419"}}>{type.toUpperCase()}S ({byType(type).length})</div>
+            {byType(type).length===0?<div style={{fontSize:10,color:"#4a6046",padding:10}}>No {type} trades posted.</div>:
+            byType(type).map(t=>(
+              <div key={t.id} style={{padding:11,border:"1px solid #1e2419",background:"#0f110e",marginBottom:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7}}>
+                  <span style={{fontSize:8,letterSpacing:1,padding:"1px 6px",border:`1px solid ${type==="resource"?"#42a5f5":type==="vehicle"?"#d4980f":"#9060c0"}`,color:type==="resource"?"#42a5f5":type==="vehicle"?"#d4980f":"#9060c0"}}>{type.toUpperCase()}</span>
+                  <span style={{fontSize:11,fontWeight:600,flex:1}}>{t.seller}</span>
+                  <span style={{fontSize:9,color:"#4a6046"}}>{t.sellerNation}</span>
+                </div>
+                <div style={{fontSize:14,fontWeight:700,color:"#d4980f",marginBottom:5}}>{t.price}</div>
+                <div style={{fontSize:10,color:"#8aaa86",lineHeight:1.6,marginBottom:8}}>{t.desc}</div>
+                <div style={{display:"flex",gap:5}}>
+                  {t.seller !== currentUser?.displayName && <Btn sm variant="g" onClick={()=>acceptTrade(t.id)}>ACCEPT</Btn>}
+                  {(t.seller === currentUser?.displayName || ctx.isAdmin) && <Btn sm variant="r" onClick={()=>cancelTrade(t.id)}>CANCEL</Btn>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// POLITICS PAGE
+// ══════════════════════════════════════════════
+function PoliticsPage({ctx}) {
+  const {politics, savePolitics, currentUser, isAdmin, showNotif} = ctx;
+  const [postBody, setPostBody] = useState("");
+  const [postType, setPostType] = useState("diplomatic");
+  const [annMsg, setAnnMsg] = useState("");
+
+  const myFac = FACTIONS.find(f=>f.id===currentUser?.nation);
+
+  const post = async () => {
+    if(!postBody.trim()) { showNotif("Write something first","err"); return; }
+    const p = {id:Date.now(), author:currentUser?.displayName, nation:currentUser?.nation, type:postType, body:postBody, ts:Date.now()};
+    await savePolitics([p, ...politics]);
+    setPostBody(""); showNotif("Posted","ok");
+  };
+
+  const announce = async () => {
+    if(!annMsg.trim()) return;
+    const p = {id:Date.now(), author:"PAVEL",nation:null,type:"ann",body:annMsg,ts:Date.now()};
+    await savePolitics([p, ...politics]);
+    setAnnMsg(""); showNotif("Announcement broadcast","ok");
+  };
+
+  const deletePost = async (id) => {
+    await savePolitics(politics.filter(p=>p.id!==id));
+  };
+
+  const typeColors = {war:"#e05050",diplomatic:"#42a5f5",lore:"#7bc47e",ann:"#d4980f",official:"#d4980f"};
+
+  return (
+    <div style={{height:"100%",overflow:"hidden",display:"grid",gridTemplateColumns:"1fr 290px"}}>
+      <div style={{overflowY:"auto",padding:14,display:"flex",flexDirection:"column",gap:9}}>
+        {/* Admin announcement */}
+        {isAdmin && (
+          <Panel titleColor="#d4980f" title="📢 Broadcast Announcement">
+            <div style={{display:"flex",gap:8}}>
+              <input value={annMsg} onChange={e=>setAnnMsg(e.target.value)} placeholder="Type announcement to all players..." onKeyDown={e=>e.key==="Enter"&&announce()}
+                style={{flex:1,background:"#0a0b09",border:"1px solid #d4980f",color:"#c8d4c4",fontSize:12,padding:"7px 10px",outline:"none"}}/>
+              <Btn variant="a" onClick={announce}>BROADCAST</Btn>
+            </div>
+          </Panel>
+        )}
+        {/* Post form */}
+        {!isAdmin && (
+          <Panel title="Post to Politics Board">
+            <div style={{display:"grid",gridTemplateColumns:"1fr 150px",gap:10,marginBottom:8}}>
+              <div/>
+              <Select label="Post Type" value={postType} onChange={e=>setPostType(e.target.value)} options={["diplomatic","war","lore"].map(t=>({value:t,label:t.charAt(0).toUpperCase()+t.slice(1)}))} style={{marginBottom:0}}/>
+            </div>
+            <div style={{marginBottom:8}}><label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>YOUR MESSAGE</label>
+              <textarea value={postBody} onChange={e=>setPostBody(e.target.value)} placeholder={`Speaking as ${myFac?.name||"your nation"}...`}
+                style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:12,padding:"7px 10px",outline:"none",resize:"vertical",minHeight:80}}/>
+            </div>
+            <Btn variant="g" onClick={post}>POST</Btn>
+          </Panel>
+        )}
+        {/* Feed */}
+        {politics.map(p=>{
+          const fac = p.nation ? FACTIONS.find(f=>f.id===p.nation) : null;
+          const col = fac?.color || "#d4980f";
+          const tc = typeColors[p.type]||"#8aaa86";
+          return (
+            <div key={p.id} style={{padding:"11px 13px",border:"1px solid #1e2419",background:"#0f110e",borderLeft:`3px solid ${p.type==="ann"?"#d4980f":p.type==="war"?"#e05050":p.type==="diplomatic"?"#42a5f5":"#7bc47e"}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
+                {fac && <div style={{width:10,height:10,borderRadius:"50%",background:col,flexShrink:0}}/>}
+                <span style={{fontSize:11,fontWeight:600,color:fac?col:"#d4980f"}}>{p.author}</span>
+                {fac && <span style={{fontSize:9,color:"#4a6046"}}>{fac.name}</span>}
+                <span style={{fontSize:8,letterSpacing:1,padding:"1px 5px",border:`1px solid ${tc}`,color:tc,marginLeft:"auto",textTransform:"uppercase"}}>{p.type}</span>
+                <span style={{fontSize:9,color:"#4a6046"}}>{new Date(p.ts).toLocaleDateString()}</span>
+                {isAdmin && <button onClick={()=>deletePost(p.id)} style={{background:"none",border:"none",color:"#e05050",cursor:"pointer",fontSize:12,padding:0}}>✕</button>}
+              </div>
+              <div style={{fontSize:11,lineHeight:1.75,color:"#c8d4c4"}}>{p.body}</div>
+            </div>
+          );
+        })}
+      </div>
+      {/* Sidebar */}
+      <div style={{borderLeft:"1px solid #1e2419",background:"#0f110e",overflowY:"auto",padding:12}}>
+        <Panel title="Alliances" style={{marginBottom:10}}>
+          <div style={{padding:"8px 10px",border:"1px solid #1e2419",marginBottom:7,background:"rgba(184,124,10,.04)"}}>
+            <div style={{fontSize:10,fontWeight:600,color:"#d4980f",marginBottom:5}}>⚔ THE AXIS</div>
+            <div style={{fontSize:9,color:"#8aaa86"}}>Serbia · Yugoslavia · Ukraine · Japan</div>
+          </div>
+          <div style={{padding:"8px 10px",border:"1px solid #1e2419",background:"rgba(139,26,26,.04)"}}>
+            <div style={{fontSize:10,fontWeight:600,color:"#e05050",marginBottom:5}}>☭ EASTERN BLOC</div>
+            <div style={{fontSize:9,color:"#8aaa86"}}>USSR · China · DPRK · Morocco</div>
+          </div>
+        </Panel>
+        <Panel title="Active Wars">
+          {[{a:"Serbia",d:"Yugoslavia",note:"Serbia won"},
+            {a:"Egypt",d:"Serbia",note:"Ongoing"},
+            {a:"Rome",d:"Israel",note:"Ongoing"},
+            {a:"Burgundy",d:"Sweden",note:"Ongoing"},
+          ].map((w,i)=>(
+            <div key={i} style={{padding:"6px 8px",border:"1px solid #8b1a1a",background:"rgba(139,26,26,.08)",marginBottom:5,fontSize:9}}>
+              <div style={{color:"#e05050",fontWeight:600}}>{w.a} vs {w.d}</div>
+              <div style={{color:"#4a6046",marginTop:2}}>{w.note}</div>
+            </div>
+          ))}
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// NATIONS PAGE
+// ══════════════════════════════════════════════
+function NationsPage({ctx}) {
+  const axis = FACTIONS.filter(f=>f.alliance==="axis");
+  const east = FACTIONS.filter(f=>f.alliance==="east");
+  const none = FACTIONS.filter(f=>!f.alliance);
+  const NC = ({f}) => (
+    <div style={{padding:11,border:"1px solid #1e2419",background:"#0f110e",borderLeft:`4px solid ${f.color}`,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="#141714"} onMouseLeave={e=>e.currentTarget.style.background="#0f110e"}>
+      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
+        <div style={{width:12,height:12,borderRadius:"50%",background:f.color}}/>
+        <div style={{fontSize:12,fontWeight:600,flex:1}}>{f.name}</div>
+      </div>
+      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
+        <Tag color={IK_COLOR[f.ik]}>{IK_LBL[f.ik]}</Tag>
+        {f.alliance?<Tag color="#d4980f">{f.alliance.toUpperCase()}</Tag>:<Tag color="#4a6046">UNALIGNED</Tag>}
+        <Tag color="#4a6046">{f.region}</Tag>
+      </div>
+      <div style={{height:3,background:"#0a0b09",overflow:"hidden",marginBottom:3}}><div style={{height:"100%",width:`${Math.min(100,f.morale/220*100)}%`,background:moraleColor(f.morale),transition:"width .4s"}}/></div>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:"#4a6046"}}><span>MORALE</span><span style={{color:moraleColor(f.morale),fontWeight:600}}>{f.morale}</span></div>
+    </div>
+  );
+  return (
+    <div style={{height:"100%",overflowY:"auto",padding:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+        <Panel title="⚔ The Axis" titleColor="#d4980f"><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{axis.map(f=><NC key={f.id} f={f}/>)}</div></Panel>
+        <Panel title="☭ Eastern Bloc" titleColor="#e05050"><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{east.map(f=><NC key={f.id} f={f}/>)}</div></Panel>
+      </div>
+      <Panel title="All Nations — Complete Dossier">
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
+          {FACTIONS.map(f=><NC key={f.id} f={f}/>)}
+        </div>
+      </Panel>
+      <Panel title="Unaligned / Independent" style={{marginTop:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
+          {none.map(f=><NC key={f.id} f={f}/>)}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// PROFILE PAGE
+// ══════════════════════════════════════════════
+function ProfilePage({ctx}) {
+  const {currentUser, isAdmin, saveUser, showNotif} = ctx;
+  const u = currentUser;
+  const fac = u?.nation ? FACTIONS.find(f=>f.id===u.nation) : null;
+  const col = fac?.color || "#3d7a3f";
+  const res = u?.resources || {bp:0,rp:0,g:0,f:0};
+  const tanks = u?.tanks || {};
+  const [changingPass, setChangingPass] = useState(false);
+  const [newPass, setNewPass] = useState("");
+
+  const changePass = async () => {
+    if(newPass.length < 4) { showNotif("Password too short","err"); return; }
+    await saveUser({...u, password: btoa(newPass)});
+    setChangingPass(false); setNewPass("");
+    showNotif("Password changed","ok");
+  };
+
+  if(!u) return <div style={{padding:40,color:"#4a6046",textAlign:"center"}}>Not logged in.</div>;
+  return (
+    <div style={{height:"100%",overflowY:"auto",padding:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"280px 1fr",gap:14}}>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Panel>
+            <div style={{width:64,height:64,borderRadius:"50%",border:`3px solid ${col}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:700,color:col,margin:"0 auto 10px"}}>{u.displayName[0].toUpperCase()}</div>
+            <div style={{fontSize:18,fontWeight:700,letterSpacing:1,textAlign:"center"}}>{u.displayName}</div>
+            <div style={{fontSize:11,color:"#4a6046",textAlign:"center",marginTop:4}}>{fac?.name||"No nation assigned"}</div>
+            {fac && <div style={{textAlign:"center",marginTop:6}}><Tag color={IK_COLOR[fac.ik]}>{IK_LBL[fac.ik]}</Tag></div>}
+            <div style={{marginTop:12}}>
+              <div style={{height:4,background:"#0a0b09",overflow:"hidden",marginBottom:3}}><div style={{height:"100%",width:`${Math.min(100,(u.morale||100)/220*100)}%`,background:moraleColor(u.morale||100),transition:"width .4s"}}/></div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#4a6046"}}><span>MORALE</span><span style={{color:moraleColor(u.morale||100),fontWeight:700}}>{u.morale||100}</span></div>
+            </div>
+          </Panel>
+          <Panel title="Stats">
+            <ResRow label="Battles Won" val={u.battlesWon||0} color="#7bc47e"/>
+            <ResRow label="Battles Lost" val={u.battlesLost||0} color="#e05050"/>
+            <ResRow label="Tiles Owned" val={u.tilesOwned||0}/>
+            <ResRow label="Joined Session" val={`#${u.joinedSession||7}`}/>
+          </Panel>
+          <Panel>
+            {!changingPass ? <Btn sm variant="ghost" onClick={()=>setChangingPass(true)}>Change Password</Btn> : (
+              <>
+                <Input label="New Password" type="password" value={newPass} onChange={e=>setNewPass(e.target.value)}/>
+                <div style={{display:"flex",gap:6}}><Btn sm variant="g" onClick={changePass}>SAVE</Btn><Btn sm variant="ghost" onClick={()=>setChangingPass(false)}>CANCEL</Btn></div>
+              </>
+            )}
+          </Panel>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Panel title="Resource Stockpile" titleColor="#d4980f">
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+              {[["Build Points","#42a5f5","bp"],["Research Pts","#66bb6a","rp"],["Gold","#ffb300","g"],["Fuel","#90a4ae","f"]].map(([lbl,col2,key])=>(
+                <div key={key} style={{padding:12,border:"1px solid #1e2419",background:"#0a0b09",textAlign:"center"}}>
+                  <div style={{fontSize:8,letterSpacing:1.5,color:"#4a6046",marginBottom:4}}>{lbl}</div>
+                  <div style={{fontSize:26,fontWeight:700,color:col2}}>{parseFloat(res[key]||0).toFixed(1)}</div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+          <Panel title="Vehicle Roster">
+            {Object.values(tanks).every(v=>v===0||!v) ? (
+              <div style={{color:"#4a6046",fontSize:11}}>No vehicles in roster. Ask admin or build vehicles in the Vehicles tab.</div>
+            ) : (
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:7}}>
+                {UNITS.filter(u=>tanks[u.id]>0).map(u=>(
+                  <div key={u.id} style={{display:"flex",alignItems:"center",gap:7,padding:"7px 9px",border:"1px solid #28312a",background:"#0a0b09"}}>
+                    <NatoSym sym={u.sym} cls={u.cls}/>
+                    <div style={{flex:1}}><div style={{fontSize:10}}>{u.name}</div><div style={{fontSize:8,color:"#4a6046"}}>{u.maint}% maint</div></div>
+                    <div style={{fontSize:18,fontWeight:700,color:"#d4980f"}}>{tanks[u.id]}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// TIMELINE PAGE
+// ══════════════════════════════════════════════
+function TimelinePage({ctx}) {
+  const {sessionLog, saveLog, showNotif, gameState} = ctx;
+  const [evS, setEvS] = useState(gameState.session||7);
+  const [evType, setEvType] = useState("war");
+  const [evFac, setEvFac] = useState("");
+  const [evDesc, setEvDesc] = useState("");
+  const [cdTime, setCdTime] = useState("");
+  const [cdDay, setCdDay] = useState("");
+
+  useEffect(()=>{
+    const iv = setInterval(()=>{
+      const n = new Date();
+      const day = n.getDay();
+      let du = day<3?3-day:day===3?0:day<6?6-day:0;
+      const nx = new Date(n); nx.setDate(n.getDate()+du); nx.setHours(18,0,0,0);
+      if(nx<=n) nx.setDate(nx.getDate()+(day===3?3:2));
+      const diff = nx-n;
+      const hh=Math.floor(diff/3600000),mm=Math.floor((diff%3600000)/60000),ss=Math.floor((diff%60000)/1000);
+      setCdDay(nx.getDay()===3?"WEDNESDAY":"SATURDAY");
+      setCdTime(`${hh}h ${String(mm).padStart(2,"0")}m ${String(ss).padStart(2,"0")}s`);
+    },1000);
+    return ()=>clearInterval(iv);
+  },[]);
+
+  const addEvent = async () => {
+    if(!evFac||!evDesc) { showNotif("Fill all fields","err"); return; }
+    const log = [...sessionLog, {s:parseInt(evS), type:evType, fac:evFac, desc:evDesc, done:false}].sort((a,b)=>a.s-b.s);
+    await saveLog(log);
+    setEvFac(""); setEvDesc(""); showNotif("Event recorded","ok");
+  };
+
+  const tc = {war:"#e05050",diplo:"#42a5f5",lore:"#7bc47e",econ:"#d4980f",rebel:"#9060c0"};
+
+  return (
+    <div style={{height:"100%",overflow:"hidden",display:"grid",gridTemplateColumns:"1fr 250px"}}>
+      <div style={{overflowY:"auto",padding:14}}>
+        <Panel style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:600,marginBottom:12}}>RECORD EVENT</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <Input label="Session #" type="number" value={evS} onChange={e=>setEvS(e.target.value)}/>
+            <Select label="Type" value={evType} onChange={e=>setEvType(e.target.value)} options={["war","diplo","lore","econ","rebel"].map(t=>({value:t,label:t.charAt(0).toUpperCase()+t.slice(1)}))} style={{marginBottom:0}}/>
+          </div>
+          <Input label="Factions Involved" value={evFac} onChange={e=>setEvFac(e.target.value)} placeholder="e.g. Serbia vs Yugoslavia"/>
+          <Input label="Description" value={evDesc} onChange={e=>setEvDesc(e.target.value)} placeholder="What occurred?"/>
+          <Btn variant="g" sm onClick={addEvent}>+ RECORD</Btn>
+        </Panel>
+        <div style={{paddingLeft:26,position:"relative"}}>
+          <div style={{position:"absolute",left:4,top:0,bottom:0,width:1,background:"linear-gradient(180deg,#3d7a3f,#1e2419,transparent)"}}/>
+          {[...sessionLog].reverse().map((ev,i)=>(
+            <div key={i} style={{position:"relative",marginBottom:11}}>
+              <div style={{position:"absolute",left:-22,width:13,height:13,borderRadius:"50%",border:`1.5px solid ${ev.cur?"#d4980f":ev.done?"#3d7a3f":"#28312a"}`,background:ev.cur?"#d4980f":ev.done?"#3d7a3f":"#0a0b09",top:3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:5}}/>
+              <div style={{background:"#0f110e",border:"1px solid #1e2419",padding:"8px 11px"}}>
+                <div style={{fontSize:8,letterSpacing:1.5,color:"#4a6046",marginBottom:2}}>SESSION {ev.s} · {ev.type.toUpperCase()}</div>
+                <div style={{fontSize:12,fontWeight:600,marginBottom:2}}>{ev.fac}</div>
+                <div style={{fontSize:9,color:"#8aaa86",lineHeight:1.6}}>{ev.desc}</div>
+                <span style={{fontSize:7,letterSpacing:1,padding:"1px 5px",border:`1px solid ${tc[ev.type]||"#4a6046"}`,color:tc[ev.type]||"#4a6046",display:"inline-block",marginTop:4,textTransform:"uppercase"}}>{ev.type}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{borderLeft:"1px solid #1e2419",background:"#0f110e",overflowY:"auto",padding:12}}>
+        <div style={{background:"#0a0b09",border:"2px solid #28312a",padding:14,textAlign:"center",marginBottom:12}}>
+          <div style={{fontSize:8,letterSpacing:2,color:"#4a6046",marginBottom:4}}>NEXT SESSION</div>
+          <div style={{fontSize:13,fontWeight:600,letterSpacing:2,color:"#8aaa86",marginBottom:3}}>{cdDay}</div>
+          <div style={{fontSize:24,fontWeight:700,letterSpacing:2,color:"#d4980f"}}>{cdTime||"--:--:--"}</div>
+        </div>
+        <Panel title="Session Rules" style={{marginBottom:10}}>
+          <div style={{fontSize:9,lineHeight:2,color:"#8aaa86"}}>
+            ▸ Tanks due <strong>1hr before</strong><br/>
+            ▸ 3 turns + 1 blitzkrieg<br/>
+            ▸ PVP: 10min · PVE: 5min<br/>
+            ▸ Draw = defender wins<br/>
+            ▸ Rebellion cooldown: 4 sessions<br/>
+            ▸ Trade blocked during war
+          </div>
+        </Panel>
+        <Panel title="Resource Values">
+          <ResRow label="2x BP" val="= 1G"/>
+          <ResRow label="2x RP" val="= 1G"/>
+          <ResRow label="1x Fuel" val="= 2G"/>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// CALCULATORS PAGE
+// ══════════════════════════════════════════════
+function CalcPage() {
+  const [morale, setMorale] = useState(100);
+  const [rbTiles, setRbTiles] = useState(1);
+  const [rbMorale, setRbMorale] = useState(100);
+  const [elCls, setElCls] = useState("light");
+  const [elBattles, setElBattles] = useState(0);
+  const [elEs, setElEs] = useState(false);
+
+  const mc = moraleColor(morale);
+  const mw = Math.min(100,morale/220*100);
+  const mfx = MORALE_TABLE.filter(e=>e.neg?morale<e.t:morale>=e.t);
+
+  const elTiers={light:[10,10,10,15],medium:[10,10,10,15],heavy:[12,12,12,20]};
+  const elNames=["NONE","VETERAN","ELITE","ACE","LEGEND"];
+  const elCols=["#4a6046","#7bc47e","#40a0a0","#d4980f","#9060c0"];
+  let cum=0,tier=0;
+  (elTiers[elCls]||[]).forEach((req,i)=>{const r=elEs?Math.floor(req/2):req;cum+=r;if(elBattles>=cum)tier=i+1;});
+
+  return (
+    <div style={{height:"100%",overflowY:"auto",padding:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+        <Panel title="Morale Calculator">
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div>
+              <label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:5}}>MORALE LEVEL</label>
+              <input type="range" min={0} max={220} value={morale} onChange={e=>setMorale(parseInt(e.target.value))} style={{width:"100%",accentColor:"#3d7a3f",marginBottom:6}}/>
+              <div style={{fontSize:48,fontWeight:700,textAlign:"center",color:mc,lineHeight:1,margin:"4px 0"}}>{morale}</div>
+              <div style={{height:4,background:"#0a0b09",overflow:"hidden",marginBottom:4}}><div style={{height:"100%",width:`${mw}%`,background:mc,transition:"width .3s"}}/></div>
+              <div style={{textAlign:"center",fontSize:9,letterSpacing:1.5,color:morale>=80&&morale<140?"#4a6046":morale<80?"#e05050":"#7bc47e"}}>
+                {morale>=80&&morale<140?"DEFAULT — NO EFFECT":morale<80?"⚠ CRISIS MODE":"✦ MORALE BOOST"}
+              </div>
+            </div>
+            <div>
+              <div style={{fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:6}}>ACTIVE EFFECTS</div>
+              <div style={{maxHeight:180,overflowY:"auto",display:"flex",flexDirection:"column",gap:3}}>
+                {mfx.length===0?<div style={{fontSize:9,color:"#4a6046"}}>Normal range. No effects.</div>:
+                mfx.map((e,i)=><div key={i} style={{padding:"3px 7px",fontSize:9,borderLeft:`2px solid ${e.neg?"#e05050":"#3d7a3f"}`,color:e.neg?"#8aaa86":"#7bc47e"}}>{e.neg?"▼":"▲"} {e.txt}</div>)}
+              </div>
+            </div>
+          </div>
+        </Panel>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Panel title="Rebellion Cost">
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:8}}>
+              <Input label="Tiles (max 3)" type="number" value={rbTiles} onChange={e=>setRbTiles(Math.min(3,Math.max(1,parseInt(e.target.value)||1)))}/>
+              <Input label="Target Morale" type="number" value={rbMorale} onChange={e=>setRbMorale(parseInt(e.target.value)||100)}/>
+            </div>
+            <ResRow label="Total Cost" val={`${rbTiles*5}G`} color="#ffb300"/>
+            <ResRow label="Max Tiles Allowed" val={rbMorale<=50?3:1}/>
+            <ResRow label="Simultaneous Rebs" val={rbMorale<=50?2:1}/>
+            <ResRow label="Alliance Cooldown" val="4 SESSIONS" color="#d4980f"/>
+          </Panel>
+          <Panel title="Elite Vehicle Tracker">
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <Select label="Class" value={elCls} onChange={e=>setElCls(e.target.value)} options={["light","medium","heavy"].map(c=>({value:c,label:c.charAt(0).toUpperCase()+c.slice(1)}))} style={{marginBottom:0}}/>
+              <Input label="Battles Fought" type="number" value={elBattles} onChange={e=>setElBattles(parseInt(e.target.value)||0)}/>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              <input type="checkbox" id="el-es" checked={elEs} onChange={e=>setElEs(e.target.checked)}/>
+              <label htmlFor="el-es" style={{fontSize:9,letterSpacing:1,color:"#8aaa86",marginBottom:0}}>Extended Service (2× faster)</label>
+            </div>
+            <ResRow label="Current Tier" val={<span style={{color:elCols[tier]}}>{elNames[tier]}</span>}/>
+            <ResRow label="Next Tier" val={tier<4?`${elNames[tier+1]} @ ${cum} battles`:"MAX TIER"} color="#d4980f"/>
+          </Panel>
+        </div>
+      </div>
+      <Panel title="Vehicle Maintenance Table">
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:10}}>
+          <thead><tr>{["Class","Maintenance","Notes"].map(h=><th key={h} style={{textAlign:"left",padding:"5px 8px",borderBottom:"1px solid #28312a",fontSize:8,letterSpacing:1.5,color:"#4a6046",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
+          <tbody>
+            {[["Jeep / Recovery","None","Free"],["Armored Car","1%","Immune to arty"],["Light / IFV / APC / Heli","5%",""],["Light TD","10%",""],["Medium Tank","10%",""],["MBT","15%",""],["Heavy Tank / TD / SPG","20%",""],["Super Heavy / SH-TD / SH-SPG","30%",""],["Landship","50%","Extreme upkeep"]].map(([c,m,n],i)=>(
+              <tr key={i} style={{borderBottom:"1px solid #1e2419"}}>
+                <td style={{padding:"5px 8px"}}>{c}</td>
+                <td style={{padding:"5px 8px",fontWeight:600,color:"#d4980f"}}>{m}</td>
+                <td style={{padding:"5px 8px",color:"#4a6046"}}>{n}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Panel>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// AI ADVISOR PAGE
+// ══════════════════════════════════════════════
+const AI_SYSTEM = `You are a tactical advisor for an alternate-history 1949 RTS game (Sprocket RTS). Be concise and precise. You know all rules.
+
+FACTIONS: Axis (Serbia-Monarchy, Yugoslavia-Capitalism, Ukraine-Communism, Japan-Capitalism) vs Eastern Bloc (USSR, China, DPRK, Morocco - all Communist). Independent: USA(Cap), Egypt(Communist-Islamist), Burgundy(Fascist), Rome(Fascist), Poland(Fascist), Israel(Cap), USSN, Baltic, Norway, PhúcEld.
+
+MORALE: Default 100. 80-100: fine. <80: crisis. <70: blitzkrieg off. <50: 2 rebellions. <20: capital loss=defeat. 0: civil war. 140+: bonuses. 200+: 2nd capital.
+MAINTENANCE: AC=1%, Light/IFV/APC=5%, LightTD=10%, Med=10%, MBT=15%, Heavy=20%, SHT=30%, Landship=50%.
+TRANSPORT: Ground: light/med=instant, heavy=+1 battle, SHT=+2. Sea: amph=instant, others 2-4+3 battles.
+ARTILLERY: 16 SPG max, 1% per SPG at matched class. Higher=half. Lower=double. AC immune.
+PRICES: LT 1BP(×2), AC 1BP(×4), Med 1.5BP, MBT 2BP, Heavy 3BP+1G, SHT 5BP+3G, Landship 8BP+5G.
+WARFARE: 3 turns+1 blitz/session. PVP 10min, PVE 5min. Draw=defender wins.
+RTS TIME: 1 session=3 months. 2 sessions/week. Live clock ticks forward.`;
+
+function AIPage({ctx}) {
+  const [msgs, setMsgs] = useState([{role:"ai",text:"**Commander.** I am your tactical advisor, fully briefed on all RTS rules and the 1949 geopolitical situation.\n\nAsk me about morale effects, artillery calculations, faction strategies, transport logistics, or any game rule."}]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const msgsRef = useRef();
+  const hist = useRef([]);
+
+  const send = async () => {
+    const msg = input.trim(); if(!msg) return;
+    setInput("");
+    setMsgs(m=>[...m,{role:"user",text:msg}]);
+    hist.current.push({role:"user",content:msg});
+    setLoading(true);
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,system:AI_SYSTEM,messages:hist.current})});
+      const data = await res.json();
+      const reply = data.content?.map(c=>c.text||"").join("")||"Error.";
+      hist.current.push({role:"assistant",content:reply});
+      setMsgs(m=>[...m,{role:"ai",text:reply}]);
+    } catch {
+      setMsgs(m=>[...m,{role:"ai",text:"⚠ Connection error."}]);
+    }
+    setLoading(false);
+  };
+
+  useEffect(()=>{if(msgsRef.current)msgsRef.current.scrollTop=99999;},[msgs,loading]);
+
+  const QS = ["Morale 50 — all effects?","16 medium SPGs vs heavy tanks?","Encirclement mechanics?","Super heavy transport sea crossing?","Rebellion rules and costs?","All capital level bonuses?","Team bonus explained?"];
+
+  return (
+    <div style={{height:"100%",overflow:"hidden",display:"grid",gridTemplateColumns:"1fr 240px"}}>
+      <div style={{display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{padding:"9px 13px",borderBottom:"1px solid #1e2419",background:"#0f110e",display:"flex",alignItems:"center",gap:9,flexShrink:0}}>
+          <div style={{width:8,height:8,background:"#7bc47e",borderRadius:"50%",flexShrink:0}}/>
+          <div><div style={{fontSize:12,fontWeight:600,letterSpacing:1}}>TACTICAL ADVISOR — FIELD AI</div><div style={{fontSize:8,letterSpacing:1.5,color:"#4a6046"}}>RULES ENGINE · STRATEGY · FACTION INTEL</div></div>
+        </div>
+        <div ref={msgsRef} style={{flex:1,overflowY:"auto",padding:11,display:"flex",flexDirection:"column",gap:8}}>
+          {msgs.map((m,i)=>(
+            <div key={i} style={{maxWidth:"87%",alignSelf:m.role==="user"?"flex-end":"flex-start"}}>
+              <div style={{fontSize:7,letterSpacing:2,color:"#4a6046",marginBottom:2,textTransform:"uppercase"}}>{m.role==="user"?"COMMANDER":"FIELD AI"}</div>
+              <div style={{padding:"7px 11px",fontSize:10,lineHeight:1.75,border:"1px solid #1e2419",background:m.role==="user"?"rgba(61,122,63,.1)":"#0f110e"}}
+                dangerouslySetInnerHTML={{__html:m.text.replace(/\n/g,"<br>").replace(/\*\*(.*?)\*\*/g,"<b style='color:#d4980f'>$1</b>").replace(/\*(.*?)\*/g,"<i style='color:#7bc47e;font-style:normal'>$1</i>")}}/>
+            </div>
+          ))}
+          {loading && <div style={{alignSelf:"flex-start"}}><div style={{fontSize:7,letterSpacing:2,color:"#4a6046",marginBottom:2}}>FIELD AI</div><div style={{padding:"7px 11px",border:"1px solid #1e2419",background:"#0f110e",display:"flex",gap:4,alignItems:"center"}}>{[0,.2,.4].map(d=><div key={d} style={{width:5,height:5,background:"#4a6046",borderRadius:"50%",animation:`bounce 1.2s ${d}s infinite`}}/>)}</div></div>}
+        </div>
+        <div style={{padding:"8px 11px",borderTop:"1px solid #1e2419",background:"#0f110e",display:"flex",gap:6}}>
+          <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} placeholder="Enter query, Commander..." style={{flex:1,resize:"none",height:38,background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:10,padding:"6px 9px",outline:"none"}}/>
+          <button onClick={send} style={{fontSize:10,letterSpacing:1,padding:"0 12px",background:"rgba(61,122,63,.15)",border:"1px solid #3d7a3f",color:"#7bc47e",cursor:"pointer",flexShrink:0}}>SEND ▶</button>
+        </div>
+      </div>
+      <div style={{borderLeft:"1px solid #1e2419",background:"#0f110e",overflowY:"auto",padding:9}}>
+        <div style={{fontSize:9,letterSpacing:2,color:"#4a6046",marginBottom:7,paddingBottom:5,borderBottom:"1px solid #1e2419"}}>QUICK QUESTIONS</div>
+        {QS.map((q,i)=><button key={i} onClick={()=>{setInput(q);}} style={{width:"100%",textAlign:"left",padding:"5px 7px",fontSize:9,background:"#0a0b09",border:"1px solid #1e2419",color:"#4a6046",cursor:"pointer",marginBottom:3,lineHeight:1.4}}>▶ {q}</button>)}
+        <div style={{fontSize:9,letterSpacing:2,color:"#4a6046",marginBottom:7,paddingBottom:5,borderBottom:"1px solid #1e2419",marginTop:10}}>FACTION INTEL</div>
+        {FACTIONS.map(f=><button key={f.id} onClick={()=>setInput(`Tactical briefing on ${f.name}. Ideology: ${IK_LBL[f.ik]}, morale ${f.morale}. Strategy and strengths?`)} style={{width:"100%",textAlign:"left",padding:"5px 7px",fontSize:9,background:"#0a0b09",border:"1px solid #1e2419",color:"#4a6046",cursor:"pointer",marginBottom:3}}>▶ {f.short}</button>)}
+      </div>
+      <style>{`@keyframes bounce{0%,60%,100%{transform:translateY(0);opacity:.3;}30%{transform:translateY(-4px);opacity:1;}}`}</style>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+// ADMIN PAGE
+// ══════════════════════════════════════════════
+function AdminPage({ctx}) {
+  const {allUsers, saveUser, showNotif, gameState, saveGameState, mapTiles, saveTiles, trades, saveTrades, savePolitics, politics, setAllUsers} = ctx;
+  const [section, setSection] = useState("players");
+  const [editingUser, setEditingUser] = useState(null);
+
+  const sections = ["players","game","map","battles","trades","announce","settings"];
+
+  const harvestSession = async () => {
+    if(!window.confirm("Distribute session resources to all players based on their tiles?")) return;
+    let count = 0;
+    for(const user of allUsers) {
+      const userTiles = mapTiles.filter(t=>t.owner===user.nation);
+      let bp=0,rp=0,g=0,f=0;
+      userTiles.forEach(t=>{
+        const tt = TILE_TYPES[t.type];
+        if(tt){bp+=tt.bp||0;rp+=tt.rp||0;g+=tt.g||0;f+=tt.f||0;}
+      });
+      if(bp>0||rp>0||g>0||f>0){
+        const updated = {...user, resources:{bp:(user.resources?.bp||0)+bp,rp:(user.resources?.rp||0)+rp,g:(user.resources?.g||0)+g,f:(user.resources?.f||0)+f}};
+        await saveUser(updated); count++;
+      }
+    }
+    showNotif(`Harvested for ${count} players based on ${mapTiles.length} tiles`,"ok");
+  };
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"180px 1fr",height:"100%",overflow:"hidden"}}>
+      <div style={{background:"#0a0b09",borderRight:"1px solid #1e2419",overflow:"hidden"}}>
+        {sections.map(s=>(
+          <button key={s} onClick={()=>setSection(s)} style={{display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:10,letterSpacing:1,cursor:"pointer",color:section===s?"#f0c040":"#4a6046",background:section===s?"#0f110e":"transparent",border:"none",borderLeft:`2px solid ${section===s?"#d4980f":"transparent"}`}}>
+            {s.toUpperCase()}
+          </button>
+        ))}
+      </div>
+      <div style={{overflowY:"auto",padding:14}}>
+        {section === "players" && (
+          <>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+              <h2 style={{fontSize:14,letterSpacing:2}}>PLAYER MANAGEMENT</h2>
+              <div style={{fontSize:9,color:"#4a6046"}}>{allUsers.length} registered players</div>
+            </div>
+            {allUsers.length===0?<div style={{color:"#4a6046",fontSize:11}}>No players registered yet. Players create accounts from the login screen.</div>:
+            allUsers.map(u=>{
+              const fac=FACTIONS.find(f=>f.id===u.nation);
+              const col=fac?.color||"#3d7a3f";
+              return (
+                <div key={u.username} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 11px",border:"1px solid #1e2419",background:"#0f110e",marginBottom:6}}>
+                  <div style={{width:30,height:30,borderRadius:"50%",border:`2px solid ${col}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:col,flexShrink:0}}>{u.displayName[0].toUpperCase()}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:600}}>{u.displayName}</div>
+                    <div style={{fontSize:9,color:"#4a6046"}}>{fac?.name||"No nation"} · M:{u.morale||100}</div>
+                    <div style={{display:"flex",gap:5,marginTop:3,flexWrap:"wrap"}}>
+                      {["bp","rp","g","f"].map(r=>(<span key={r} style={{fontSize:8,padding:"1px 5px",border:"1px solid #28312a",color:"#8aaa86"}}>{r.toUpperCase()}:{parseFloat(u.resources?.[r]||0).toFixed(0)}</span>))}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:5}}>
+                    <Btn sm variant="a" onClick={()=>setEditingUser(u)}>EDIT</Btn>
+                  </div>
+                </div>
+              );
+            })}
+            {editingUser && <PlayerEditModal user={editingUser} onSave={async(u)=>{await saveUser(u);setEditingUser(null);showNotif(`${u.displayName} updated`,"ok");}} onClose={()=>setEditingUser(null)}/>}
+          </>
+        )}
+
+        {section === "game" && (
+          <>
+            <h2 style={{fontSize:14,letterSpacing:2,marginBottom:14}}>GAME STATE</h2>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+              <Panel title="Session Settings">
+                <Input label="Current Session #" type="number" value={gameState.session||7} onChange={e=>saveGameState({...gameState,session:parseInt(e.target.value)})}/>
+                <Input label="Year" type="number" value={gameState.year||1949} onChange={e=>saveGameState({...gameState,year:parseInt(e.target.value)})}/>
+                <Btn variant="g" sm onClick={()=>showNotif("Game state saved","ok")}>SAVE</Btn>
+              </Panel>
+              <Panel title="Faction Morale Quick Edit" titleColor="#d4980f">
+                {FACTIONS.map(f=>(
+                  <div key={f.id} style={{display:"flex",alignItems:"center",gap:7,marginBottom:5}}>
+                    <div style={{width:9,height:9,borderRadius:"50%",background:f.color,flexShrink:0}}/>
+                    <span style={{flex:1,fontSize:10}}>{f.short}</span>
+                    <input type="number" min={0} max={220} defaultValue={f.morale} id={`fm-${f.id}`}
+                      style={{width:55,background:"#0a0b09",border:"1px solid #28312a",color:moraleColor(f.morale),fontSize:11,padding:"2px 5px",outline:"none",textAlign:"center"}}/>
+                    <span style={{fontSize:9,color:"#4a6046"}}>/220</span>
+                  </div>
+                ))}
+                <Btn variant="a" sm style={{marginTop:7}} onClick={()=>{FACTIONS.forEach(f=>{const el=document.getElementById(`fm-${f.id}`);if(el)f.morale=parseInt(el.value)||100;});showNotif("Faction morale updated","ok");}}>APPLY</Btn>
+              </Panel>
+            </div>
+            <Panel style={{marginTop:14}} title="Session Harvest">
+              <div style={{fontSize:10,color:"#8aaa86",marginBottom:10}}>Automatically calculates each player's resource income based on their faction's owned tiles and distributes it.</div>
+              <Btn variant="g" onClick={harvestSession}>▶ HARVEST SESSION — DISTRIBUTE RESOURCES</Btn>
+            </Panel>
+          </>
+        )}
+
+        {section === "map" && (
+          <>
+            <h2 style={{fontSize:14,letterSpacing:2,marginBottom:14}}>MAP CONTROL — {mapTiles.length} TILES</h2>
+            <Panel style={{marginBottom:14}}>
+              <div style={{fontSize:10,color:"#8aaa86",marginBottom:10}}>Switch to the <strong style={{color:"#7bc47e"}}>THEATRE MAP</strong> tab to place and edit tiles directly by clicking on the map. Use the +TILE button in the map sidebar. Right-click (or click) any tile marker to edit it.</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:8}}>
+                {FACTIONS.map(f=>{
+                  const owned = mapTiles.filter(t=>t.owner===f.id);
+                  const income = owned.reduce((acc,t)=>{const tt=TILE_TYPES[t.type];if(tt){acc.bp+=tt.bp||0;acc.rp+=tt.rp||0;acc.g+=tt.g||0;acc.f+=tt.f||0;}return acc;},{bp:0,rp:0,g:0,f:0});
+                  return (
+                    <div key={f.id} style={{padding:"8px 10px",border:"1px solid #1e2419",background:"#0a0b09",borderLeft:`3px solid ${f.color}`}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
+                        <div style={{width:9,height:9,borderRadius:"50%",background:f.color}}/>
+                        <span style={{fontSize:11,fontWeight:600}}>{f.name}</span>
+                        <span style={{fontSize:9,color:"#4a6046",marginLeft:"auto"}}>{owned.length} tiles</span>
+                      </div>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {income.bp>0&&<span style={{fontSize:9,padding:"1px 5px",border:"1px solid #1565c0",color:"#42a5f5"}}>{income.bp}BP</span>}
+                        {income.rp>0&&<span style={{fontSize:9,padding:"1px 5px",border:"1px solid #2e7d32",color:"#66bb6a"}}>{income.rp}RP</span>}
+                        {income.g>0&&<span style={{fontSize:9,padding:"1px 5px",border:"1px solid #e65100",color:"#ffb300"}}>{income.g}G</span>}
+                        {income.f>0&&<span style={{fontSize:9,padding:"1px 5px",border:"1px solid #37474f",color:"#90a4ae"}}>{income.f}F</span>}
+                        {income.bp===0&&income.rp===0&&income.g===0&&income.f===0&&<span style={{fontSize:9,color:"#4a6046"}}>No income</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Panel>
+          </>
+        )}
+
+        {section === "battles" && (
+          <>
+            <h2 style={{fontSize:14,letterSpacing:2,marginBottom:14}}>BATTLE MANAGEMENT</h2>
+            <Panel title="SPG Fire Calculator" titleColor="#e05050" style={{marginBottom:14}}>
+              <div style={{fontSize:10,color:"#8aaa86",marginBottom:12}}>Calculate SPG damage and apply it to a unit on the map. Select your SPG lineup, target, and fire.</div>
+              <SPGFirePanel ctx={ctx}/>
+            </Panel>
+            <Panel title="Casualty Report" titleColor="#e05050">
+              <CasualtyPanel ctx={ctx}/>
+            </Panel>
+          </>
+        )}
+
+        {section === "trades" && (
+          <>
+            <h2 style={{fontSize:14,letterSpacing:2,marginBottom:14}}>TRADE LOG ({trades.length} active)</h2>
+            {trades.length===0?<div style={{color:"#4a6046"}}>No active trades.</div>:
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:10}}>
+              <thead><tr>{["Seller","Type","Price","Description",""].map(h=><th key={h} style={{textAlign:"left",padding:"5px 8px",borderBottom:"1px solid #28312a",fontSize:8,letterSpacing:1.5,color:"#4a6046",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
+              <tbody>{trades.map(t=>(
+                <tr key={t.id} style={{borderBottom:"1px solid #1e2419"}}>
+                  <td style={{padding:"5px 8px"}}>{t.seller}</td>
+                  <td style={{padding:"5px 8px",color:"#8aaa86"}}>{t.type}</td>
+                  <td style={{padding:"5px 8px",color:"#ffb300",fontWeight:600}}>{t.price}</td>
+                  <td style={{padding:"5px 8px",color:"#8aaa86",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.desc}</td>
+                  <td style={{padding:"5px 8px"}}><Btn xs variant="r" onClick={async()=>{await saveTrades(trades.filter(x=>x.id!==t.id));showNotif("Trade removed","ok");}}>DEL</Btn></td>
+                </tr>
+              ))}</tbody>
+            </table>}
+          </>
+        )}
+
+        {section === "announce" && (
+          <>
+            <h2 style={{fontSize:14,letterSpacing:2,marginBottom:14}}>ANNOUNCEMENTS</h2>
+            <Panel>
+              <div style={{fontSize:9,color:"#8aaa86",marginBottom:12}}>Broadcasts an announcement to the politics board as a pinned official post.</div>
+              <div style={{marginBottom:8}}><label style={{display:"block",fontSize:9,letterSpacing:1.5,color:"#4a6046",marginBottom:3}}>ANNOUNCEMENT TEXT</label>
+                <textarea id="ann-text" style={{width:"100%",background:"#0a0b09",border:"1px solid #28312a",color:"#c8d4c4",fontSize:12,padding:"8px 10px",outline:"none",resize:"vertical",minHeight:100}} placeholder="Type your announcement..."/>
+              </div>
+              <Btn variant="a" onClick={async()=>{
+                const txt = document.getElementById("ann-text")?.value?.trim();
+                if(!txt) return;
+                const p = {id:Date.now(),author:"PAVEL",nation:null,type:"ann",body:txt,ts:Date.now()};
+                await savePolitics([p,...politics]);
+                document.getElementById("ann-text").value="";
+                showNotif("Announcement broadcast","ok");
+              }}>📢 BROADCAST TO ALL PLAYERS</Btn>
+            </Panel>
+          </>
+        )}
+
+        {section === "settings" && (
+          <>
+            <h2 style={{fontSize:14,letterSpacing:2,marginBottom:14}}>SETTINGS</h2>
+            <Panel title="Admin Password">
+              <AdminPasswordPanel ctx={ctx}/>
+            </Panel>
+            <Panel style={{marginTop:14}} title="Nation Passwords — Distribute to Players">
+              <div style={{fontSize:9,color:"#8aaa86",marginBottom:10}}>These are the default passwords for each nation. Players can change their passwords after login. Share these privately.</div>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:10}}>
+                <thead><tr>{["Nation","Default Password","Ideology"].map(h=><th key={h} style={{textAlign:"left",padding:"5px 8px",borderBottom:"1px solid #28312a",fontSize:8,letterSpacing:1.5,color:"#4a6046",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
+                <tbody>{FACTIONS.map(f=>(
+                  <tr key={f.id} style={{borderBottom:"1px solid #1e2419"}}>
+                    <td style={{padding:"5px 8px",color:f.color}}>{f.name}</td>
+                    <td style={{padding:"5px 8px",fontFamily:"'Courier New',monospace",color:"#d4980f"}}>{f.id}_rts2049</td>
+                    <td style={{padding:"5px 8px",color:IK_COLOR[f.ik]}}>{IK_LBL[f.ik]}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </Panel>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlayerEditModal({user, onSave, onClose}) {
+  const [u, setU] = useState({...user, resources:{...user.resources}, tanks:{...user.tanks}});
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:900,background:"rgba(0,0,0,.8)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
+      <div style={{background:"#0f110e",border:"1px solid #28312a",padding:18,width:560,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,.95)"}} onClick={e=>e.stopPropagation()}>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:14,paddingBottom:9,borderBottom:"1px solid #1e2419"}}>EDIT PLAYER: {u.displayName.toUpperCase()}</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Select label="Assign Nation" value={u.nation||""} onChange={e=>setU({...u,nation:e.target.value,ideology:FACTIONS.find(f=>f.id===e.target.value)?.ik||null})} options={[{value:"",label:"No Nation"},...FACTIONS.map(f=>({value:f.id,label:f.name}))]} style={{marginBottom:0}}/>
+          <Input label="Morale (0-220)" type="number" value={u.morale||100} onChange={e=>setU({...u,morale:parseInt(e.target.value)||100})} style={{marginBottom:0}}/>
+        </div>
+        <div style={{marginTop:10,marginBottom:10}}><div style={{fontSize:9,letterSpacing:1.5,color:"#d4980f",marginBottom:7}}>RESOURCES</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+            {["bp","rp","g","f"].map(r=><Input key={r} label={r.toUpperCase()} type="number" value={u.resources?.[r]||0} onChange={e=>setU({...u,resources:{...u.resources,[r]:parseFloat(e.target.value)||0}})} style={{marginBottom:0}}/>)}
+          </div>
+        </div>
+        <div style={{marginBottom:10}}><div style={{fontSize:9,letterSpacing:1.5,color:"#d4980f",marginBottom:7}}>BATTLES & STATS</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+            <Input label="Battles Won" type="number" value={u.battlesWon||0} onChange={e=>setU({...u,battlesWon:parseInt(e.target.value)||0})} style={{marginBottom:0}}/>
+            <Input label="Battles Lost" type="number" value={u.battlesLost||0} onChange={e=>setU({...u,battlesLost:parseInt(e.target.value)||0})} style={{marginBottom:0}}/>
+            <Input label="Tiles Owned" type="number" value={u.tilesOwned||0} onChange={e=>setU({...u,tilesOwned:parseInt(e.target.value)||0})} style={{marginBottom:0}}/>
+          </div>
+        </div>
+        <div><div style={{fontSize:9,letterSpacing:1.5,color:"#d4980f",marginBottom:7}}>VEHICLE ROSTER</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
+            {UNITS.map(uu=>(
+              <div key={uu.id} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 5px",border:"1px solid #1e2419",background:"#0a0b09"}}>
+                <NatoSym sym={uu.sym} cls={uu.cls}/>
+                <span style={{flex:1,fontSize:8}}>{uu.abbr}</span>
+                <input type="number" min={0} value={u.tanks?.[uu.id]||0} onChange={e=>setU({...u,tanks:{...u.tanks,[uu.id]:parseInt(e.target.value)||0}})} style={{width:36,background:"#0a0b09",border:"1px solid #28312a",color:"#d4980f",fontSize:10,padding:"2px 4px",outline:"none",textAlign:"center"}}/>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:7,justifyContent:"flex-end",marginTop:14,paddingTop:10,borderTop:"1px solid #1e2419"}}>
+          <Btn variant="ghost" sm onClick={onClose}>CANCEL</Btn>
+          <Btn variant="g" sm onClick={()=>onSave(u)}>SAVE ALL CHANGES</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SPGFirePanel({ctx}) {
+  const {mapUnits, saveUnits, showNotif} = ctx;
+  const [spgCount, setSpgCount] = useState(8);
+  const [howType, setHowType] = useState("medium");
+  const [targetUnit, setTargetUnit] = useState("");
+  const [targetCls, setTargetCls] = useState("medium");
+
+  const res = calcSPGDamage(spgCount, howType, targetCls);
+  const fire = async () => {
+    if(!targetUnit) { showNotif("Select a target unit","err"); return; }
+    const unit = mapUnits.find(u=>u.id===parseInt(targetUnit));
+    if(!unit) return;
+    const deduct = res.kills;
+    const newCount = Math.max(0, (unit.count||0) - deduct);
+    await saveUnits(mapUnits.map(u=>u.id===unit.id?{...u,count:newCount}:u));
+    showNotif(`SPG fire: ${res.pct}% damage, ~${deduct} vehicles destroyed from ${unit.name}`, "ok");
+  };
+  return (
+    <div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:10}}>
+        <Input label="SPG Count" type="number" value={spgCount} onChange={e=>setSpgCount(Math.min(16,parseInt(e.target.value)||0))} style={{marginBottom:0}}/>
+        <Select label="Howitzer" value={howType} onChange={e=>setHowType(e.target.value)} options={["light","medium","heavy","antifort"].map(t=>({value:t,label:t.charAt(0).toUpperCase()+t.slice(1)}))} style={{marginBottom:0}}/>
+        <Select label="Target Class" value={targetCls} onChange={e=>setTargetCls(e.target.value)} options={["light","medium","heavy","super"].map(t=>({value:t,label:t.charAt(0).toUpperCase()+t.slice(1)}))} style={{marginBottom:0}}/>
+        <Select label="Target Unit" value={targetUnit} onChange={e=>setTargetUnit(e.target.value)} options={[{value:"",label:"Select unit"},...mapUnits.map(u=>({value:u.id,label:`${u.name} (${u.count})`}))]} style={{marginBottom:0}}/>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
+        <div style={{padding:"6px 10px",border:"1px solid #28312a",background:"#0a0b09",fontSize:11}}><span style={{color:"#4a6046"}}>DMG: </span><span style={{color:"#e05050",fontWeight:700}}>{res.pct}%</span></div>
+        <div style={{padding:"6px 10px",border:"1px solid #28312a",background:"#0a0b09",fontSize:11}}><span style={{color:"#4a6046"}}>KILLS: </span><span style={{color:"#e05050",fontWeight:700}}>~{res.kills}</span></div>
+        <div style={{padding:"6px 10px",border:"1px solid #28312a",background:"#0a0b09",fontSize:11}}><span style={{color:"#4a6046"}}>EFF: </span><span style={{color:res.eff==="SUPERIOR"?"#7bc47e":res.eff==="OPTIMAL"?"#c8d4c4":"#e05050",fontWeight:700}}>{res.eff}</span></div>
+        <button onClick={fire} style={{padding:"8px 18px",background:"#8b1a1a",border:"2px solid #e05050",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",letterSpacing:2,marginLeft:"auto"}}>🔥 FIRE SPG</button>
+      </div>
+    </div>
+  );
+}
+
+function CasualtyPanel({ctx}) {
+  const {mapUnits, saveUnits, allUsers, saveUser, showNotif, mapTiles, saveTiles} = ctx;
+  const [unit, setUnit] = useState("");
+  const [losses, setLosses] = useState({});
+  const [tileLost, setTileLost] = useState("");
+
+  const selectedUnit = mapUnits.find(u=>u.id===parseInt(unit));
+  const tileLostData = mapTiles.find(t=>t.id===parseInt(tileLost));
+
+  const applyBattle = async () => {
+    if(!unit) { showNotif("Select a unit","err"); return; }
+    let unitUpdates = [...mapUnits];
+    let userUpdates = null;
+    // Deduct vehicles from unit
+    const uIdx = unitUpdates.findIndex(u=>u.id===parseInt(unit));
+    if(uIdx>=0){
+      const totalLoss = Object.values(losses).reduce((a,b)=>a+(parseInt(b)||0),0);
+      unitUpdates[uIdx] = {...unitUpdates[uIdx], count: Math.max(0,(unitUpdates[uIdx].count||0)-totalLoss)};
+    }
+    // Deduct from player roster + morale
+    const unitData = mapUnits.find(u=>u.id===parseInt(unit));
+    if(unitData?.faction){
+      const player = allUsers.find(u=>u.nation===unitData.faction);
+      if(player){
+        const newTanks = {...player.tanks};
+        Object.entries(losses).forEach(([id,cnt])=>{
+          const n=parseInt(cnt)||0; if(n>0) newTanks[id]=Math.max(0,(newTanks[id]||0)-n);
+        });
+        let moraleLoss = 0;
+        if(tileLostData) moraleLoss += TILE_TYPES[tileLostData.type]?.moraleLoss||1;
+        userUpdates = {...player, tanks:newTanks, morale:Math.max(0,(player.morale||100)-moraleLoss), battlesLost:(player.battlesLost||0)+1};
+      }
+    }
+    await saveUnits(unitUpdates);
+    if(userUpdates) await saveUser(userUpdates);
+    if(tileLostData){
+      // Transfer tile ownership (attacker won)
+      showNotif(`Casualties applied. Morale -${TILE_TYPES[tileLostData.type]?.moraleLoss||0} from tile loss.`,"ok");
+    } else {
+      showNotif("Battle casualties applied to unit and player roster","ok");
+    }
+    setLosses({});
+  };
+
+  return (
+    <div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <Select label="Affected Unit" value={unit} onChange={e=>setUnit(e.target.value)} options={[{value:"",label:"Select unit"},...mapUnits.map(u=>({value:u.id,label:`${u.name} (${FACTIONS.find(f=>f.id===u.faction)?.short||"?"}) ${u.count} veh`}))]} style={{marginBottom:0}}/>
+        <Select label="Tile Lost (if any)" value={tileLost} onChange={e=>setTileLost(e.target.value)} options={[{value:"",label:"No tile lost"},...mapTiles.map(t=>({value:t.id,label:`${t.name} (${TILE_TYPES[t.type]?.label})`}))]} style={{marginBottom:0}}/>
+      </div>
+      {selectedUnit && (
+        <>
+          <div style={{fontSize:9,letterSpacing:1.5,color:"#d4980f",marginBottom:7}}>VEHICLES LOST IN BATTLE</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5,marginBottom:10}}>
+            {UNITS.map(u=>(
+              <div key={u.id} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 5px",border:"1px solid #1e2419",background:"#0a0b09"}}>
+                <NatoSym sym={u.sym} cls={u.cls}/>
+                <span style={{flex:1,fontSize:8}}>{u.abbr}</span>
+                <input type="number" min={0} value={losses[u.id]||0} onChange={e=>setLosses(l=>({...l,[u.id]:e.target.value}))} style={{width:36,background:"#0a0b09",border:"1px solid #8b1a1a",color:"#e05050",fontSize:10,padding:"2px 4px",outline:"none",textAlign:"center"}}/>
+              </div>
+            ))}
+          </div>
+          {tileLostData && <div style={{padding:"7px 10px",background:"rgba(139,26,26,.1)",border:"1px solid #8b1a1a",fontSize:10,marginBottom:10}}>⚠ Tile Lost: <strong>{tileLostData.name}</strong> — Morale -{TILE_TYPES[tileLostData.type]?.moraleLoss||0}</div>}
+          <button onClick={applyBattle} style={{width:"100%",padding:11,background:"#c13030",border:"2px solid #e05050",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",letterSpacing:2}}>⚔ APPLY BATTLE CASUALTIES</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function AdminPasswordPanel({ctx}) {
+  const {adminPass, setAdminPass, showNotif} = ctx;
+  const [np, setNp] = useState("");
+  const [cp, setCp] = useState("");
+  return (
+    <div>
+      <Input label="Current Password" type="password" value={cp} onChange={e=>setCp(e.target.value)}/>
+      <Input label="New Password" type="password" value={np} onChange={e=>setNp(e.target.value)}/>
+      <Btn variant="a" sm onClick={()=>{
+        if(cp!==adminPass){showNotif("Current password wrong","err");return;}
+        if(np.length<4){showNotif("Too short","err");return;}
+        setAdminPass(np);setCp("");setNp("");
+        showNotif("Admin password changed. Note: resets on page refresh. Store securely.","ok");
+      }}>CHANGE ADMIN PASSWORD</Btn>
+    </div>
+  );
+}
